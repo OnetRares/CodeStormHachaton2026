@@ -31,12 +31,11 @@ except ModuleNotFoundError as exc:
     PDF_COMPARE_IMPORT_ERROR = exc
 
 try:
-    from plan_parser import _build_from_cunoscute, parse_plan_from_text_heuristic
+    from plan_parser import get_plan_discipline
     from validation_service import valideaza_nivel2
     PLAN_VALIDATION_IMPORT_ERROR = None
 except ModuleNotFoundError as exc:
-    _build_from_cunoscute = None
-    parse_plan_from_text_heuristic = None
+    get_plan_discipline = None
     valideaza_nivel2 = None
     PLAN_VALIDATION_IMPORT_ERROR = exc
 
