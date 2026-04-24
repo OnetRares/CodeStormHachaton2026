@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import styles from './Dashboard.module.css';
 
 // SVG Icons
@@ -83,8 +83,30 @@ const FileTextIcon = () => (
   </svg>
 );
 
+const CheckmarkIcon = () => (
+  <svg
+    width="64"
+    height="64"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="#16a34a"
+    strokeWidth="3"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" fill="#dcfce7" />
+    <polyline points="8 12 11 15 16 9" />
+  </svg>
+);
+
 export default function Dashboard() {
   const [dragActive, setDragActive] = useState({ fd: false, pi: false });
+  const [fdFile, setFdFile] = useState(null);
+  const [piFile, setPiFile] = useState(null);
+  
+  // Create refs for hidden file inputs
+  const fdInputRef = useRef(null);
+  const piInputRef = useRef(null);
 
   const handleDrag = (e, type) => {
     e.preventDefault();
@@ -100,8 +122,45 @@ export default function Dashboard() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive((prev) => ({ ...prev, [type]: false }));
-    // Handle files here in real implementation
-    console.log(`Files dropped on ${type}:`, e.dataTransfer.files);
+    
+    // Get the dropped files
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0]; // Take only the first file
+      if (type === 'fd') {
+        setFdFile(file);
+        console.log('FD file selected:', file.name);
+      } else if (type === 'pi') {
+        setPiFile(file);
+        console.log('PI file selected:', file.name);
+      }
+    }
+  };
+
+  const handleFileChange = (e, type) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      if (type === 'fd') {
+        setFdFile(file);
+        console.log('FD file selected:', file.name);
+      } else if (type === 'pi') {
+        setPiFile(file);
+        console.log('PI file selected:', file.name);
+      }
+    }
+  };
+
+  const handleCardClick = (inputRef) => {
+    inputRef.current?.click();
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
 
   // Mock validation data
@@ -161,25 +220,36 @@ export default function Dashboard() {
             <div
               className={`${styles.uploadCard} ${
                 dragActive.fd ? styles.dragActive : ''
-              }`}
+              } ${fdFile ? styles.fileSelected : ''}`}
               onDragEnter={(e) => handleDrag(e, 'fd')}
               onDragLeave={(e) => handleDrag(e, 'fd')}
               onDragOver={(e) => handleDrag(e, 'fd')}
               onDrop={(e) => handleDrop(e, 'fd')}
+              onClick={() => handleCardClick(fdInputRef)}
+              style={{ cursor: 'pointer' }}
             >
               <div className={styles.uploadIcon}>
-                <UploadIcon />
+                {fdFile ? <CheckmarkIcon /> : <UploadIcon />}
               </div>
               <h3 className={styles.uploadTitle}>
-                Upload Fișa de Disciplină (FD)
+                {fdFile ? 'File Selected' : 'Upload Fișa de Disciplină (FD)'}
               </h3>
-              <p className={styles.uploadSubtext}>
-                Drag and drop your file here or click to browse
-              </p>
+              {fdFile ? (
+                <div className={styles.fileInfo}>
+                  <p className={styles.fileName}>{fdFile.name}</p>
+                  <p className={styles.fileSize}>{formatFileSize(fdFile.size)}</p>
+                </div>
+              ) : (
+                <p className={styles.uploadSubtext}>
+                  Drag and drop your file here or click to browse
+                </p>
+              )}
               <input
+                ref={fdInputRef}
                 type="file"
                 className={styles.hiddenInput}
                 accept=".pdf,.doc,.docx"
+                onChange={(e) => handleFileChange(e, 'fd')}
               />
             </div>
 
@@ -187,25 +257,36 @@ export default function Dashboard() {
             <div
               className={`${styles.uploadCard} ${
                 dragActive.pi ? styles.dragActive : ''
-              }`}
+              } ${piFile ? styles.fileSelected : ''}`}
               onDragEnter={(e) => handleDrag(e, 'pi')}
               onDragLeave={(e) => handleDrag(e, 'pi')}
               onDragOver={(e) => handleDrag(e, 'pi')}
               onDrop={(e) => handleDrop(e, 'pi')}
+              onClick={() => handleCardClick(piInputRef)}
+              style={{ cursor: 'pointer' }}
             >
               <div className={styles.uploadIcon}>
-                <UploadIcon />
+                {piFile ? <CheckmarkIcon /> : <UploadIcon />}
               </div>
               <h3 className={styles.uploadTitle}>
-                Upload Plan de Învățământ (PI)
+                {piFile ? 'File Selected' : 'Upload Plan de Învățământ (PI)'}
               </h3>
-              <p className={styles.uploadSubtext}>
-                Drag and drop your file here or click to browse
-              </p>
+              {piFile ? (
+                <div className={styles.fileInfo}>
+                  <p className={styles.fileName}>{piFile.name}</p>
+                  <p className={styles.fileSize}>{formatFileSize(piFile.size)}</p>
+                </div>
+              ) : (
+                <p className={styles.uploadSubtext}>
+                  Drag and drop your file here or click to browse
+                </p>
+              )}
               <input
+                ref={piInputRef}
                 type="file"
                 className={styles.hiddenInput}
                 accept=".pdf,.doc,.docx"
+                onChange={(e) => handleFileChange(e, 'pi')}
               />
             </div>
           </div>

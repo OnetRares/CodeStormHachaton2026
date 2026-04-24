@@ -115,6 +115,17 @@
   transform: scale(1.02);
 }
 
+.uploadCard.fileSelected {
+  border: 2px solid #16a34a;
+  background-color: #f0fdf4;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.15);
+}
+
+.uploadCard.fileSelected:hover {
+  border-color: #15803d;
+  box-shadow: 0 6px 16px rgba(22, 163, 74, 0.2);
+}
+
 .uploadIcon {
   width: 64px;
   height: 64px;
@@ -149,6 +160,28 @@
 .uploadSubtext {
   font-size: 0.875rem;
   color: #64748b;
+  text-align: center;
+  margin: 0;
+}
+
+.fileInfo {
+  text-align: center;
+  margin: 0;
+}
+
+.fileName {
+  font-size: 0.95rem;
+  color: #16a34a;
+  text-align: center;
+  margin: 0.5rem 0 0.25rem 0;
+  font-weight: 500;
+  word-break: break-word;
+  max-width: 250px;
+}
+
+.fileSize {
+  font-size: 0.8rem;
+  color: #65a30d;
   text-align: center;
   margin: 0;
 }
@@ -354,6 +387,15 @@
 
   .uploadSubtext {
     font-size: 0.8rem;
+  }
+
+  .fileName {
+    max-width: 150px;
+    font-size: 0.85rem;
+  }
+
+  .fileSize {
+    font-size: 0.75rem;
   }
 
   .table {
