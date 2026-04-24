@@ -1,0 +1,373 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+}
+
+/* Header/Navbar */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 2rem;
+  background-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: -0.5px;
+}
+
+.logoutButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  background-color: #ef4444;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.logoutButton:hover {
+  background-color: #dc2626;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  transform: translateY(-2px);
+}
+
+.logoutButton:active {
+  transform: translateY(0);
+}
+
+/* Main Content */
+.main {
+  flex: 1;
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Section Title */
+.sectionTitle {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.5px;
+}
+
+/* Upload Section */
+.uploadSection {
+  margin-bottom: 3rem;
+}
+
+.uploadCardsContainer {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  max-width: 900px;
+}
+
+.uploadCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  background-color: #ffffff;
+  border: 2px dashed #cbd5e1;
+  border-radius: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.uploadCard:hover {
+  border-color: #64748b;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.uploadCard.dragActive {
+  border-color: #3b82f6;
+  background-color: #f0f9ff;
+  box-shadow: 0 8px 16px rgba(59, 130, 246, 0.2);
+  transform: scale(1.02);
+}
+
+.uploadIcon {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f1f5f9;
+  border-radius: 0.75rem;
+  color: #64748b;
+  margin-bottom: 1rem;
+  transition: all 0.3s ease;
+}
+
+.uploadCard:hover .uploadIcon {
+  background-color: #e2e8f0;
+  color: #475569;
+}
+
+.uploadCard.dragActive .uploadIcon {
+  background-color: #dbeafe;
+  color: #3b82f6;
+}
+
+.uploadTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.uploadSubtext {
+  font-size: 0.875rem;
+  color: #64748b;
+  text-align: center;
+  margin: 0;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+/* Validation Section */
+.validationSection {
+  margin-top: 2rem;
+}
+
+.tableCard {
+  background-color: #ffffff;
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.table thead {
+  background-color: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.table th {
+  padding: 1rem 1.5rem;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 0.8rem;
+}
+
+.table td {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #475569;
+}
+
+.table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Document Cell */
+.documentCell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.documentCell svg {
+  flex-shrink: 0;
+  color: #64748b;
+}
+
+/* Status Badge */
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  width: fit-content;
+}
+
+.status-success {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+
+.status-error {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.status-warning {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.statusBadge svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Details Cell */
+.detailsCell {
+  color: #64748b;
+  font-size: 0.9rem;
+  max-width: 300px;
+}
+
+/* Action Button */
+.actionButton {
+  padding: 0.5rem 1rem;
+  background-color: #3b82f6;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.actionButton:hover {
+  background-color: #2563eb;
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.actionButton:active {
+  transform: scale(0.98);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .main {
+    padding: 1rem;
+  }
+
+  .header {
+    padding: 1rem;
+  }
+
+  .sectionTitle {
+    font-size: 1.5rem;
+  }
+
+  .uploadCardsContainer {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .uploadCard {
+    padding: 2rem 1.5rem;
+  }
+
+  .table th,
+  .table td {
+    padding: 1rem 0.75rem;
+  }
+
+  .logoutButton span {
+    display: none;
+  }
+
+  .logoutButton {
+    padding: 0.625rem;
+  }
+
+  .detailsCell {
+    max-width: 150px;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    min-height: auto;
+  }
+
+  .header {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .main {
+    padding: 1rem 0.75rem;
+  }
+
+  .sectionTitle {
+    font-size: 1.25rem;
+  }
+
+  .uploadIcon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .uploadTitle {
+    font-size: 1rem;
+  }
+
+  .uploadSubtext {
+    font-size: 0.8rem;
+  }
+
+  .table {
+    font-size: 0.85rem;
+  }
+
+  .statusBadge {
+    flex-direction: column;
+    font-size: 0.75rem;
+    padding: 0.375rem 0.75rem;
+  }
+
+  .actionButton {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+  }
+}
