@@ -1,0 +1,9 @@
+easyocr>=1.7.2
+fastapi>=0.111.0
+numpy>=1.26.0
+Pillow>=10.0.0
+pdfplumber>=0.11.9
+PyMuPDF>=1.24.0
+pypdf>=4.2.0
+python-multipart>=0.0.9
+uvicorn>=0.30.0
