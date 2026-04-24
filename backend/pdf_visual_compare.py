@@ -111,10 +111,14 @@ def build_diff_payload(left_lines: list[str], right_lines: list[str]) -> dict:
 
 
 def build_html_diff(
-    left_lines: list[str], right_lines: list[str], left_label: str, right_label: str
+    left_lines: list[str],
+    right_lines: list[str],
+    left_label: str,
+    right_label: str,
+    summary: dict,
 ) -> str:
     html_diff = HtmlDiff(tabsize=2, wrapcolumn=120)
-    content = html_diff.make_file(
+    table_html = html_diff.make_table(
         left_lines,
         right_lines,
         fromdesc=html.escape(left_label),
@@ -122,14 +126,163 @@ def build_html_diff(
         context=False,
         numlines=1,
     )
-    style_override = """
-<style>
-table.diff { width: 100%; border-collapse: collapse; font-family: Consolas, monospace; font-size: 12px; }
-.diff_header { background: #f2f2f2; color: #1f1f1f; }
-.diff_add, .diff_sub, .diff_chg { background: #ffd6d6 !important; color: #8b0000 !important; font-weight: 700; }
-</style>
+
+    similarity_pct = float(summary["similarity_ratio"]) * 100.0
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PDF Visual Diff</title>
+  <style>
+    :root {{
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --line: #e4e7ee;
+      --text: #141821;
+      --muted: #5b6476;
+      --accent: #14366e;
+      --danger-bg: #ffe4e6;
+      --danger-text: #9f1239;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", "Trebuchet MS", sans-serif;
+      color: var(--text);
+      background: linear-gradient(160deg, #eef3ff 0%, var(--bg) 35%, #fff8f8 100%);
+    }}
+    .shell {{
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 22px;
+    }}
+    .hero {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px 20px;
+      box-shadow: 0 8px 24px rgba(20, 24, 33, 0.08);
+      margin-bottom: 14px;
+    }}
+    .title {{
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      letter-spacing: 0.2px;
+    }}
+    .meta {{
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }}
+    .cards {{
+      margin: 14px 0 18px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+    }}
+    .card {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }}
+    .label {{
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }}
+    .value {{
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--accent);
+    }}
+    .legend {{
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 12px;
+    }}
+    .chip {{
+      display: inline-block;
+      border: 1px solid #fca5a5;
+      background: var(--danger-bg);
+      color: var(--danger-text);
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 2px 8px;
+      margin-left: 6px;
+    }}
+    .diff-wrap {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: auto;
+      box-shadow: 0 8px 24px rgba(20, 24, 33, 0.06);
+    }}
+    table.diff {{
+      width: 100%;
+      border-collapse: collapse;
+      font-family: "IBM Plex Mono", "Consolas", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }}
+    .diff_header {{
+      background: #edf2ff;
+      color: #213057;
+      font-weight: 700;
+      border-bottom: 1px solid var(--line);
+      padding: 8px;
+    }}
+    td {{
+      border-bottom: 1px solid #f0f2f6;
+      padding: 4px 8px;
+      vertical-align: top;
+      word-break: break-word;
+    }}
+    .diff_next {{
+      background: #f9fafc;
+      color: #6b7280;
+      text-align: center;
+      font-weight: 600;
+      width: 26px;
+    }}
+    .diff_add,
+    .diff_sub,
+    .diff_chg {{
+      background: var(--danger-bg) !important;
+      color: var(--danger-text) !important;
+      font-weight: 700;
+      border-radius: 3px;
+      padding: 1px 2px;
+    }}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <h1 class="title">PDF Visual Comparison</h1>
+      <p class="meta"><strong>Left:</strong> {html.escape(left_label)}<br><strong>Right:</strong> {html.escape(right_label)}</p>
+      <div class="cards">
+        <div class="card"><span class="label">Similarity</span><span class="value">{similarity_pct:.2f}%</span></div>
+        <div class="card"><span class="label">Equal Lines</span><span class="value">{int(summary["equal_lines"])}</span></div>
+        <div class="card"><span class="label">Replaced</span><span class="value">{int(summary["replaced_lines"])}</span></div>
+        <div class="card"><span class="label">Inserted</span><span class="value">{int(summary["inserted_lines"])}</span></div>
+        <div class="card"><span class="label">Deleted</span><span class="value">{int(summary["deleted_lines"])}</span></div>
+      </div>
+      <p class="legend">Changes are highlighted in red.<span class="chip">MODIFIED</span></p>
+    </section>
+    <section class="diff-wrap">
+      {table_html}
+    </section>
+  </main>
+</body>
+</html>
 """
-    return content.replace("</head>", f"{style_override}\n</head>")
 
 
 def parse_args() -> argparse.Namespace:
@@ -258,6 +411,7 @@ def main() -> int:
         right_lines,
         left_label=left_pdf.name,
         right_label=right_pdf.name,
+        summary=diff_payload["summary"],
     )
     diff_html_path.write_text(html_content, encoding="utf-8")
 
