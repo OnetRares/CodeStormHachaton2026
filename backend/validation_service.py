@@ -7,15 +7,12 @@ from typing import Optional
 from rapidfuzz import fuzz
 
 from pdf_ingestion_service import FisaData, PlanDisciplina
+from ocr_name_fix import repair_discipline_name
 
-
-# ---------------------------------------------------------------------------
-# Models
-# ---------------------------------------------------------------------------
 
 class Severitate(str, Enum):
-    EROARE = "eroare"       # blocker — date fundamental greșite
-    AVERTISMENT = "avertisment"  # posibil greșit — necesită verificare umană
+    EROARE = "eroare"
+    AVERTISMENT = "avertisment"
     OK = "ok"
 
 
@@ -25,9 +22,10 @@ class RezultatValidare:
     nume_fisa: str
     semestru_fisa: int
     severitate: Severitate
-    tip: str          # slug scurt, util pentru filtrare în frontend
+    tip: str
     mesaj: str
     detalii: dict = field(default_factory=dict)
+    competente_recomandate: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -57,6 +55,7 @@ class RaportValidare:
                     "tip": r.tip,
                     "mesaj": r.mesaj,
                     "detalii": r.detalii,
+                    "competente_recomandate": r.competente_recomandate,
                 }
                 for r in self.rezultate
             ],
@@ -64,14 +63,157 @@ class RaportValidare:
 
 
 # ---------------------------------------------------------------------------
-# Matching helpers
+# Competente reale din PI — Informatica, UTBv 2024-2027
+# Fiecare disciplina e mapata la competentele pe care le dezvolta
 # ---------------------------------------------------------------------------
+COMPETENTE_PI = [
+    {
+        "cod": "CP1",
+        "nume": "Creează softuri, dezvoltă prototipul pentru software",
+        "discipline": [
+            "fundamentele programarii",
+            "programare orientata pe obiecte",
+            "structuri de date",
+            "algoritmi fundamentali",
+            "algoritmica grafurilor",
+            "metode avansate de programare",
+            "inginerie software",
+            "programare paralela, concurenta si distribuita",
+            "dezvoltarea aplicatiilor web",
+            "interfete om-calculator",
+            "medii si instrumente de programare",
+            "limbaje formale si compilatoare",
+        ],
+    },
+    {
+        "cod": "CP2",
+        "nume": "Utilizează șabloane de proiectare de software, creează diagrama de proces",
+        "discipline": [
+            "inginerie software",
+            "metode avansate de programare",
+            "medii si instrumente de programare",
+            "limbaje formale si compilatoare",
+            "arhitectura sistemelor de calcul",
+            "sisteme de operare",
+            "managementul proiectelor informatice",
+            "programare orientata pe obiecte",
+            "dezvoltarea aplicatiilor web",
+        ],
+    },
+    {
+        "cod": "CP3",
+        "nume": "Analizează specificații software, definește arhitectura software, proiectează sistemul informatic",
+        "discipline": [
+            "inginerie software",
+            "arhitectura sistemelor de calcul",
+            "sisteme de operare",
+            "retele de calculatoare",
+            "baze de date",
+            "inteligenta artificiala",
+            "automate, calculabilitate si complexitate",
+            "managementul proiectelor informatice",
+            "probabilitati si statistica",
+            "calcul numeric",
+            "interfete om-calculator",
+            "practica de specialitate",
+            "practica pentru elaborarea lucrarii de licenta",
+        ],
+    },
+    {
+        "cod": "CT1",
+        "nume": "Aplică competente de bază în materie de programare, operează echipamente hardware digitale",
+        "discipline": [
+            "fundamentele programarii",
+            "algoritmi fundamentali",
+            "arhitectura sistemelor de calcul",
+            "sisteme de operare",
+            "retele de calculatoare",
+            "fundamentele algebrice ale informaticii",
+            "algebra liniara, geometrie analitica si diferentiala",
+            "analiza matematica",
+            "logica matematica si computationala",
+            "notiuni fundamentale de informatica",
+            "notiuni fundamentale de matematica",
+            "structuri de date",
+        ],
+    },
+    {
+        "cod": "CT2",
+        "nume": "Utilizează software de comunicare și colaborare, efectuează căutări pe Internet",
+        "discipline": [
+            "retele de calculatoare",
+            "dezvoltarea aplicatiilor web",
+            "medii si instrumente de programare",
+            "redactare si comunicare stiintifica si profesionala",
+            "limba engleza 1",
+            "limba engleza 2",
+            "limba germana 1",
+            "limba germana 2",
+            "limba germana 1-2",
+            "limba germana 1 2",
+        ],
+    },
+    {
+        "cod": "CT3",
+        "nume": "Identifică probleme, soluționează probleme",
+        "discipline": [
+            "algoritmi fundamentali",
+            "algoritmica grafurilor",
+            "structuri de date",
+            "automate, calculabilitate si complexitate",
+            "inteligenta artificiala",
+            "calcul numeric",
+            "probabilitati si statistica",
+            "logica matematica si computationala",
+            "analiza matematica",
+            "algebra liniara, geometrie analitica si diferentiala",
+            "fundamentele algebrice ale informaticii",
+            "notiuni fundamentale de matematica",
+            "notiuni fundamentale de informatica",
+        ],
+    },
+    {
+        "cod": "CT4",
+        "nume": "Demonstrează angajament, gândește rapid, gândește analitic",
+        "discipline": [
+            "analiza matematica",
+            "algebra liniara, geometrie analitica si diferentiala",
+            "fundamentele algebrice ale informaticii",
+            "logica matematica si computationala",
+            "automate, calculabilitate si complexitate",
+            "probabilitati si statistica",
+            "calcul numeric",
+            "practica de specialitate",
+            "practica pentru elaborarea lucrarii de licenta",
+            "notiuni fundamentale de matematica",
+            "educatie fizica si sport 1",
+            "educatie fizica si sport 2",
+        ],
+    },
+    {
+        "cod": "CT5",
+        "nume": "Lucrează în echipe, organizează informații, obiecte și resurse",
+        "discipline": [
+            "managementul proiectelor informatice",
+            "redactare si comunicare stiintifica si profesionala",
+            "practica de specialitate",
+            "practica pentru elaborarea lucrarii de licenta",
+            "inginerie software",
+            "etica si integritate academica i",
+            "etica si integritate academica",
+            "limba engleza 1",
+            "limba engleza 2",
+            "limba germana 1",
+            "limba germana 2",
+            "limba germana 1-2",
+            "educatie fizica si sport 1",
+            "educatie fizica si sport 2",
+        ],
+    },
+]
 
-# Prag minim de similaritate (0-100) pentru a considera două nume ca fiind
-# același curs (ex: "Algebră liniară" vs "Algebra Liniara")
 SIMILARITY_THRESHOLD = 72
 
-# Mapare formă verificare PI (coloana FV) → variante acceptate în FD
 FV_MAP: dict[str, set[str]] = {
     "e":   {"examen", "e", "exam"},
     "c":   {"colocviu", "c", "colocv"},
@@ -81,7 +223,6 @@ FV_MAP: dict[str, set[str]] = {
 
 
 def _normalize(text: str) -> str:
-    """Lowercase, fără diacritice, fără spații multiple."""
     import unicodedata, re
     text = unicodedata.normalize("NFKD", text)
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
@@ -90,29 +231,20 @@ def _normalize(text: str) -> str:
     return text
 
 
-def _find_match(
-    fisa: FisaData,
-    plan: list[PlanDisciplina],
-) -> Optional[PlanDisciplina]:
-    """
-    Caută disciplina din PI care corespunde cel mai bine FD-ului.
-    Prioritate: potrivire exactă cod > potrivire exactă nume > fuzzy nume.
-    """
+def _find_match(fisa: FisaData, plan: list[PlanDisciplina]) -> Optional[PlanDisciplina]:
+    # Folosim numele reparat pentru matching
     fisa_cod = _normalize(fisa.cod or "")
-    fisa_nume = _normalize(fisa.nume or "")
+    fisa_nume = _normalize(repair_discipline_name(fisa.nume))
 
-    # 1. Cod exact
     if fisa_cod:
         for p in plan:
             if _normalize(p.cod) == fisa_cod:
                 return p
 
-    # 2. Nume exact
     for p in plan:
         if _normalize(p.nume) == fisa_nume:
             return p
 
-    # 3. Fuzzy pe nume
     best_score = 0
     best_match: Optional[PlanDisciplina] = None
     for p in plan:
@@ -127,150 +259,114 @@ def _find_match(
     return None
 
 
-def _fv_matches(evaluare_fisa: str, fv_plan: str) -> bool:
-    """Verifică dacă forma de evaluare din FD corespunde FV din PI."""
-    fv_key = _normalize(fv_plan)
-    ev_norm = _normalize(evaluare_fisa)
-    accepted = FV_MAP.get(fv_key, {fv_key})
-    return ev_norm in accepted or any(ev_norm.startswith(a) for a in accepted)
-
-
-# ---------------------------------------------------------------------------
-# Core validation — Nivel 2
-# ---------------------------------------------------------------------------
-
-def valideaza_nivel2(
-    fise: list[FisaData],
-    plan: list[PlanDisciplina],
-) -> RaportValidare:
+def _recomanda_competente(nume_disciplina: str) -> list[str]:
     """
-    Realizează validarea cross-document FD ↔ PI.
-
-    Verificări per FD:
-      1. Există în PI? (după cod sau nume fuzzy)
-      2. Creditele coincid?
-      3. Semestrul coincide?
-      4. Forma de verificare (E/C/V) coincide?
+    Returnează competentele CP1-CP3, CT1-CT5 relevante pentru o disciplina,
+    bazat pe mapping-ul explicit din PI.
+    Foloseste numele reparat (fara distorsiuni OCR).
     """
+    nume_reparat = repair_discipline_name(nume_disciplina)
+    nume_norm = _normalize(nume_reparat)
+    rezultat: list[str] = []
+
+    for comp in COMPETENTE_PI:
+        for disc in comp["discipline"]:
+            disc_norm = _normalize(disc)
+            if disc_norm == nume_norm:
+                rezultat.append(f"{comp['cod']}: {comp['nume']}")
+                break
+            score = fuzz.token_sort_ratio(nume_norm, disc_norm)
+            if score >= 82:
+                rezultat.append(f"{comp['cod']}: {comp['nume']}")
+                break
+
+    return rezultat
+
+
+def valideaza_nivel2(fise: list[FisaData], plan: list[PlanDisciplina]) -> RaportValidare:
     rezultate: list[RezultatValidare] = []
 
     for fisa in fise:
-        match = _find_match(fisa, plan)
+        # Reparăm numele înainte de orice operație
+        nume_reparat = repair_discipline_name(fisa.nume)
+        fisa_display = fisa
+        # Cream o copie cu numele reparat pentru afisare
+        fisa_display_nume = nume_reparat
 
-        # ----------------------------------------------------------------
-        # FD nu a fost găsit în PI
-        # ----------------------------------------------------------------
+        match = _find_match(fisa, plan)
+        competente = _recomanda_competente(fisa.nume)
+
         if match is None:
             rezultate.append(RezultatValidare(
                 cod_fisa=fisa.cod,
-                nume_fisa=fisa.nume,
+                nume_fisa=fisa_display_nume,
                 semestru_fisa=fisa.semestru,
                 severitate=Severitate.EROARE,
                 tip="fisa_negasita_in_plan",
-                mesaj=f"Disciplina '{fisa.nume}' nu a fost găsită în Planul de Învățământ.",
+                mesaj=f"Disciplina '{fisa_display_nume}' nu a fost gasita in Planul de Invatamant.",
                 detalii={"cod_cautat": fisa.cod},
+                competente_recomandate=competente,
             ))
             continue
 
-        # ----------------------------------------------------------------
-        # FD găsit — verificări punct cu punct
-        # ----------------------------------------------------------------
-        found_issues = False
+        # Colectăm toate problemele găsite pentru această disciplină
+        probleme: list[str] = []
+        detalii_combinate: dict = {"cod_plan": match.cod}
+        severitate_max = Severitate.OK
 
-        # 1. Credite
         if fisa.credite != match.credite:
-            rezultate.append(RezultatValidare(
-                cod_fisa=fisa.cod,
-                nume_fisa=fisa.nume,
-                semestru_fisa=fisa.semestru,
-                severitate=Severitate.EROARE,
-                tip="credite_diferite",
-                mesaj=(
-                    f"'{fisa.nume}': creditele din FD ({fisa.credite}) "
-                    f"diferă față de PI ({match.credite})."
-                ),
-                detalii={
-                    "credite_fisa": fisa.credite,
-                    "credite_plan": match.credite,
-                    "cod_plan": match.cod,
-                },
-            ))
-            found_issues = True
+            probleme.append(f"credite diferite: FD={fisa.credite}, PI={match.credite}")
+            detalii_combinate["credite_fisa"] = fisa.credite
+            detalii_combinate["credite_plan"] = match.credite
+            severitate_max = Severitate.EROARE
 
-        # 2. Semestru
         if fisa.semestru != match.semestru:
+            probleme.append(f"semestru diferit: FD={fisa.semestru}, PI={match.semestru}")
+            detalii_combinate["semestru_fisa"] = fisa.semestru
+            detalii_combinate["semestru_plan"] = match.semestru
+            severitate_max = Severitate.EROARE
+
+        similarity = fuzz.token_sort_ratio(_normalize(fisa_display_nume), _normalize(match.nume))
+        if SIMILARITY_THRESHOLD <= similarity < 95:
+            probleme.append(f"nume similar dar nu identic cu '{match.nume}' (similaritate {similarity}%)")
+            detalii_combinate["similaritate_procent"] = similarity
+            detalii_combinate["nume_plan"] = match.nume
+            if severitate_max == Severitate.OK:
+                severitate_max = Severitate.AVERTISMENT
+
+        if not probleme:
+            # Totul OK
             rezultate.append(RezultatValidare(
                 cod_fisa=fisa.cod,
-                nume_fisa=fisa.nume,
-                semestru_fisa=fisa.semestru,
-                severitate=Severitate.EROARE,
-                tip="semestru_diferit",
-                mesaj=(
-                    f"'{fisa.nume}': semestrul din FD ({fisa.semestru}) "
-                    f"diferă față de PI ({match.semestru})."
-                ),
-                detalii={
-                    "semestru_fisa": fisa.semestru,
-                    "semestru_plan": match.semestru,
-                    "cod_plan": match.cod,
-                },
-            ))
-            found_issues = True
-
-        # 3. Formă verificare
-        # PI stochează codul FV (E/C/V/A/R); FD stochează textul complet
-        # Folosim FV-ul din PI ca referință
-        fv_plan = _normalize(match.cod)  # coloana FV nu e în PlanDisciplina încă —
-        # dacă colegul extinde modelul cu câmpul `fv`, îl folosim direct.
-        # Deocamdată facem verificarea dacă câmpul e disponibil.
-        evaluare_fisa = _normalize(fisa.evaluare)
-
-        # Verificare posibilă doar dacă FD are evaluare explicită și diferă clar
-        if evaluare_fisa and evaluare_fisa not in {"neprecizat", ""}:
-            # Heuristică: dacă FD zice "examen" dar PI are C → conflict
-            # Această verificare devine precisă când PlanDisciplina va include câmpul fv
-            pass  # placeholder — se activează când modelul PI include fv (vezi nota de mai jos)
-
-        # 4. Potrivire fuzzy sub prag — avertisment de nume
-        fisa_nume_norm = _normalize(fisa.nume)
-        plan_nume_norm = _normalize(match.nume)
-        similarity = fuzz.token_sort_ratio(fisa_nume_norm, plan_nume_norm)
-        if similarity < 95 and similarity >= SIMILARITY_THRESHOLD:
-            rezultate.append(RezultatValidare(
-                cod_fisa=fisa.cod,
-                nume_fisa=fisa.nume,
-                semestru_fisa=fisa.semestru,
-                severitate=Severitate.AVERTISMENT,
-                tip="nume_similar_nu_identic",
-                mesaj=(
-                    f"'{fisa.nume}' a fost asociat cu '{match.nume}' din PI "
-                    f"(similaritate {similarity}%). Verificați manual."
-                ),
-                detalii={
-                    "nume_fisa": fisa.nume,
-                    "nume_plan": match.nume,
-                    "similaritate_procent": similarity,
-                    "cod_plan": match.cod,
-                },
-            ))
-            found_issues = True
-
-        # Totul OK pentru această FD
-        if not found_issues:
-            rezultate.append(RezultatValidare(
-                cod_fisa=fisa.cod,
-                nume_fisa=fisa.nume,
+                nume_fisa=fisa_display_nume,
                 semestru_fisa=fisa.semestru,
                 severitate=Severitate.OK,
                 tip="ok",
-                mesaj=f"'{fisa.nume}' — toate câmpurile coincid cu PI.",
+                mesaj=f"'{fisa_display_nume}' — toate campurile coincid cu PI.",
                 detalii={"cod_plan": match.cod},
+                competente_recomandate=competente,
+            ))
+        else:
+            # Un singur rezultat cu toate problemele combinate
+            tip = "erori_multiple" if len(probleme) > 1 else (
+                "credite_diferite" if "credite" in probleme[0] else
+                "semestru_diferit" if "semestru" in probleme[0] else
+                "nume_similar_nu_identic"
+            )
+            mesaj = f"'{fisa_display_nume}': " + "; ".join(probleme) + "."
+            rezultate.append(RezultatValidare(
+                cod_fisa=fisa.cod,
+                nume_fisa=fisa_display_nume,
+                semestru_fisa=fisa.semestru,
+                severitate=severitate_max,
+                tip=tip,
+                mesaj=mesaj,
+                detalii=detalii_combinate,
+                competente_recomandate=competente,
             ))
 
-    # ----------------------------------------------------------------
-    # Discipline din PI fără FD corespunzătoare (invers)
-    # ----------------------------------------------------------------
-    fise_nume_norm = {_normalize(f.nume) for f in fise}
+    # Discipline din PI fara FD
+    fise_nume_norm = {_normalize(repair_discipline_name(f.nume)) for f in fise}
     fise_cod_norm = {_normalize(f.cod or "") for f in fise}
 
     for p in plan:
@@ -288,16 +384,11 @@ def valideaza_nivel2(
                 semestru_fisa=p.semestru,
                 severitate=Severitate.AVERTISMENT,
                 tip="disciplina_plan_fara_fisa",
-                mesaj=(
-                    f"Disciplina '{p.nume}' (cod: {p.cod}) există în PI "
-                    f"dar nu are o Fișă de Disciplină corespunzătoare."
-                ),
+                mesaj=f"Disciplina '{p.nume}' (cod: {p.cod}) exista in PI dar nu are Fisa de Disciplina.",
                 detalii={"cod_plan": p.cod, "credite_plan": p.credite},
+                competente_recomandate=_recomanda_competente(p.nume),
             ))
 
-    # ----------------------------------------------------------------
-    # Sumar
-    # ----------------------------------------------------------------
     erori = sum(1 for r in rezultate if r.severitate == Severitate.EROARE)
     avertismente = sum(1 for r in rezultate if r.severitate == Severitate.AVERTISMENT)
     ok = sum(1 for r in rezultate if r.severitate == Severitate.OK)

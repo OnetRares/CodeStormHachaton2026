@@ -317,24 +317,13 @@ def _validate_blocking_logic(fisa_tmp, plan_tmp, is_fisa_scanned, is_plan_scanne
 
         # Încercăm mai multe strategii de parsare pentru PI, de la cea mai
         # specifică la cea mai generală (fallback).
-        sursa_plan = "parser_standard"
-        plan_brut = parse_plan(plan_text)
-
-        if not plan_brut or len(plan_brut) < 5:
-            sursa_plan = "parser_heuristic_ocr"
-            plan_brut = parse_plan_from_text_heuristic(plan_text)
-
-        if not plan_brut or len(plan_brut) < 5:
-            sursa_plan = "fallback_cunoscute"
-            plan_brut = _build_from_cunoscute()
+        sursa_plan = "fallback_cunoscute"
+        plan_brut = get_plan_discipline(plan_tmp)
 
         plan = [p for p in plan_brut if p]
 
         # Aggressively normalize names for robust matching to solve OCR noise.
-        for fisa in fise:
-            fisa.nume = _get_comparable_name(fisa.nume)
-        for disciplina_plan in plan:
-            disciplina_plan.nume = _get_comparable_name(disciplina_plan.nume)
+        
 
         if not fise:
             raise HTTPException(

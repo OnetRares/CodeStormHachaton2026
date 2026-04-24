@@ -29,6 +29,9 @@ class FisaData:
     semestru: int
     credite: int
     evaluare: str
+    evaluare_cod: str | None
+    ore_saptamana: int | None
+    total_ore_plan: int | None
     continut_descriere: str
     continut_curs: str
 
@@ -105,6 +108,22 @@ def normalize_evaluare(value: str) -> str:
         "verificare": "verificare",
     }
     return mapping.get(first_token, clean)
+
+
+def evaluare_to_code(normalized: str) -> str | None:
+    if not normalized:
+        return None
+    head = normalized.split(" ", 1)[0]
+    short_map = {
+        "examen": "E",
+        "exam": "E",
+        "e": "E",
+        "colocviu": "C",
+        "c": "C",
+        "verificare": "V",
+        "v": "V",
+    }
+    return short_map.get(head, head[:1].upper() if head else None)
 
 
 def parse_int(value: str | None) -> int | None:
@@ -350,6 +369,24 @@ def parse_fisa(text: str) -> FisaData:
         keywords=["2.6 tipul de evaluare", "forma de evaluare", "evaluare"],
     )
 
+    ore_saptamana_raw = extract_field(
+        normalized,
+        patterns=[
+            r"(?:numar de ore pe saptamana|ore pe saptamana|ore/saptamana)\s*[:\-]?\s*(?P<value>\d{1,2})",
+            r"(?:ore pe saptamana)\s*(?P<value>\d{1,2})",
+        ],
+        keywords=["ore pe saptamana", "ore/saptamana"],
+    )
+
+    total_ore_raw = extract_field(
+        normalized,
+        patterns=[
+            r"(?:total ore|total ore din planul de invatamant|total ore plan)\s*[:\-]?\s*(?P<value>\d{1,4})",
+            r"(?:total ore)\s*(?P<value>\d{1,4})",
+        ],
+        keywords=["total ore", "total ore din planul de invatamant"],
+    )
+
     descriere = extract_section(
         normalized,
         start_keywords=[
@@ -408,6 +445,9 @@ def parse_fisa(text: str) -> FisaData:
         curs_norm = descriere_norm
 
     evaluare = normalize_evaluare(evaluare_raw) or "neprecizat"
+    evaluare_cod = evaluare_to_code(evaluare)
+    ore_saptamana = parse_int(ore_saptamana_raw) or None
+    total_ore_plan = parse_int(total_ore_raw) or None
 
     return FisaData(
         cod=cod_normalized,
@@ -415,6 +455,9 @@ def parse_fisa(text: str) -> FisaData:
         semestru=semestru,
         credite=parse_int(credite_raw) or -1,
         evaluare=evaluare,
+        evaluare_cod=evaluare_cod,
+        ore_saptamana=ore_saptamana,
+        total_ore_plan=total_ore_plan,
         continut_descriere=descriere_norm,
         continut_curs=curs_norm,
     )
@@ -754,6 +797,9 @@ def initialize_db(db_path: Path) -> None:
                 nume TEXT NOT NULL,
                 semestru INTEGER NOT NULL CHECK (semestru IN (1, 2)),
                 credite INTEGER NOT NULL CHECK (credite > 0)
+                ,evaluare_format TEXT
+                ,ore_saptamana INTEGER
+                ,total_ore_plan INTEGER
             )
             """
         )
@@ -792,10 +838,18 @@ def store_data(
         for fisa in fise_items:
             cursor = conn.execute(
                 """
-                INSERT INTO fisa_discipline (cod, nume, semestru, credite)
-                VALUES (?, ?, ?, ?)
-                """,
-                (fisa.cod, fisa.nume, fisa.semestru, fisa.credite),
+                    INSERT INTO fisa_discipline (cod, nume, semestru, credite, evaluare_format, ore_saptamana, total_ore_plan)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        fisa.cod,
+                        fisa.nume,
+                        fisa.semestru,
+                        fisa.credite,
+                        fisa.evaluare_cod,
+                        fisa.ore_saptamana,
+                        fisa.total_ore_plan,
+                    ),
             )
             fisa_id = int(cursor.lastrowid)
             fisa_ids.append(fisa_id)
