@@ -1,38 +1,352 @@
-.container { display: flex; flex-direction: column; min-height: 100vh; background: #f1f5f9; font-family: -apple-system, sans-serif; }
-.header { display: flex; justify-content: space-between; padding: 1rem 2rem; background: white; border-bottom: 1px solid #e2e8f0; align-items: center; }
-.logo { font-weight: bold; font-size: 1.2rem; color: #1e293b; }
-.logoutButton { background: #ef4444; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #f1f5f9;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
 
-.main { flex: 1; padding: 2rem; width: 100%; max-width: 1600px; margin: 0 auto; }
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+}
 
-/* Upload Cards */
-.uploadCardsContainer { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-top: 2rem; }
-.uploadCard { background: white; padding: 2rem; border-radius: 12px; border: 2px dashed #cbd5e1; text-align: center; cursor: pointer; transition: 0.3s; }
-.uploadCard:hover { border-color: #2563eb; background: #f8fafc; }
-.fileSelected { border: 2px solid #16a34a; background: #f0fdf4; }
+.logo {
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #1e293b;
+}
 
-.analyzeButton { background: #2563eb; color: white; border: none; padding: 1rem 2.5rem; border-radius: 50px; font-weight: bold; cursor: pointer; font-size: 1.1rem; }
-.analyzeButton:disabled { background: #94a3b8; cursor: not-allowed; }
+.logoutButton {
+  background: #ef4444;
+  color: #ffffff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
 
-/* Visual Comparison (Diff Tool) */
-.diffContainer { animation: slideUp 0.4s ease; }
-.diffHeader { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-.diffWrapper { display: flex; gap: 1px; background: #e2e8f0; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; height: 75vh; }
-.diffColumn { flex: 1; background: white; display: flex; flex-direction: column; }
-.columnLabel { background: #f8fafc; padding: 0.8rem; font-weight: 800; font-size: 0.75rem; color: #64748b; border-bottom: 1px solid #e2e8f0; text-align: center; }
+.main {
+  flex: 1;
+  padding: 2rem;
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+}
 
-.lineArea { flex: 1; overflow-y: auto; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.8rem; line-height: 1.5; }
-.changeBlock { border-bottom: 1px solid #f1f5f9; }
+.uploadSection {
+  animation: slideUp 0.25s ease;
+}
 
-.diffLine { display: flex; min-height: 22px; }
-.lineNum { width: 45px; background: #f1f5f9; color: #94a3b8; text-align: right; padding-right: 8px; user-select: none; border-right: 1px solid #e2e8f0; }
-.lineText { padding-left: 12px; white-space: pre-wrap; word-break: break-all; }
+.sectionTitle {
+  font-size: 1.8rem;
+  color: #0f172a;
+  margin: 0;
+  text-align: center;
+}
 
-/* CULORILE DE COMPARARE (AICI SE VEDE DIFERENȚA) */
-.removed { background-color: #ffeef0; color: #b91c1c; } /* Roșu pal pentru stânga */
-.added { background-color: #e6ffed; color: #166534; }   /* Verde pal pentru dreapta */
+.errorBox {
+  margin: 1.25rem auto 0;
+  max-width: 900px;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+}
 
-.backButton { background: none; border: none; color: #2563eb; font-weight: bold; cursor: pointer; }
-.hiddenInput { display: none; }
+.uploadCardsContainer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
 
-@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.uploadCard {
+  background: #ffffff;
+  padding: 2rem;
+  border-radius: 12px;
+  border: 2px dashed #cbd5e1;
+  text-align: center;
+  cursor: pointer;
+  transition: 0.2s ease;
+  min-height: 230px;
+}
+
+.uploadCard h3 {
+  margin: 0.75rem 0 0.45rem;
+  color: #0f172a;
+}
+
+.uploadCard p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.uploadCard:hover {
+  border-color: #2563eb;
+  background: #f8fafc;
+}
+
+.uploadIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #334155;
+}
+
+.fileSelected {
+  border: 2px solid #16a34a;
+  background: #f0fdf4;
+}
+
+.infoText {
+  margin-top: 1rem;
+  color: #475569;
+  text-align: center;
+}
+
+.buttonRow {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.analyzeButton {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  padding: 1rem 2.5rem;
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 1.05rem;
+}
+
+.analyzeButton:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.diffContainer {
+  animation: slideUp 0.3s ease;
+}
+
+.diffHeader {
+  display: grid;
+  grid-template-columns: 180px 1fr 180px;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.diffHeader h2 {
+  margin: 0;
+  text-align: center;
+  color: #0f172a;
+  font-size: 1.25rem;
+}
+
+.backButton {
+  justify-self: start;
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.reportButton {
+  justify-self: end;
+  text-decoration: none;
+  background: #1d4ed8;
+  color: #ffffff;
+  padding: 0.45rem 0.7rem;
+  border-radius: 7px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.metricCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.metricLabel {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.metricValue {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+.diffWrapper {
+  display: flex;
+  gap: 1px;
+  background: #e2e8f0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  height: 72vh;
+}
+
+.diffColumn {
+  flex: 1;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+
+.columnLabel {
+  background: #f8fafc;
+  padding: 0.8rem;
+  font-weight: 800;
+  font-size: 0.75rem;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: center;
+}
+
+.lineArea {
+  flex: 1;
+  overflow-y: auto;
+  font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.changeBlock {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.blockTitle {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #0f172a;
+  background: #eef2ff;
+  border-bottom: 1px solid #edf2f7;
+  font-weight: 700;
+}
+
+.diffLine {
+  display: flex;
+  min-height: 22px;
+}
+
+.lineNum {
+  width: 62px;
+  background: #f1f5f9;
+  color: #94a3b8;
+  text-align: right;
+  padding-right: 8px;
+  user-select: none;
+  border-right: 1px solid #e2e8f0;
+}
+
+.lineText {
+  padding: 0 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1;
+  font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+  font-weight: 400;
+}
+
+.noHighlight {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.leftMissing {
+  background: #ffffff;
+  color: #64748b;
+  font-style: italic;
+}
+
+.bDiff {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.bDiffMissing {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.bTokenDiff {
+  background: #ef4444;
+  color: #0b0b0b;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.emptyState {
+  padding: 1.2rem;
+  color: #334155;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1200px) {
+  .uploadCardsContainer {
+    grid-template-columns: 1fr;
+  }
+
+  .metricGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .diffHeader {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .backButton,
+  .reportButton {
+    justify-self: center;
+  }
+
+  .diffWrapper {
+    height: 68vh;
+    flex-direction: column;
+  }
+}

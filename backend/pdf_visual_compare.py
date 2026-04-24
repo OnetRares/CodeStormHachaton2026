@@ -5,6 +5,7 @@ import argparse
 import html
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from difflib import HtmlDiff, SequenceMatcher
 from pathlib import Path
@@ -22,6 +23,15 @@ class ExtractedPdf:
 
 def normalize_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
+
+
+def normalize_for_compare(text: str) -> str:
+    compact = normalize_whitespace(text)
+    without_diacritics = "".join(
+        ch for ch in unicodedata.normalize("NFKD", compact)
+        if not unicodedata.combining(ch)
+    )
+    return without_diacritics.lower()
 
 
 def extract_pdf(pdf_path: Path) -> ExtractedPdf:
@@ -67,7 +77,9 @@ def build_line_view(data: ExtractedPdf) -> list[str]:
 
 
 def build_diff_payload(left_lines: list[str], right_lines: list[str]) -> dict:
-    matcher = SequenceMatcher(None, left_lines, right_lines)
+    left_cmp = [normalize_for_compare(line) for line in left_lines]
+    right_cmp = [normalize_for_compare(line) for line in right_lines]
+    matcher = SequenceMatcher(None, left_cmp, right_cmp)
 
     equal_count = 0
     replace_count = 0
