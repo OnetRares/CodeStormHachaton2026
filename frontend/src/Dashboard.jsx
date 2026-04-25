@@ -6,6 +6,7 @@ import {
   fetchCompetencySubjects,
   fetchWeightsHoursCheck,
   fetchRecommendedCompetencies,
+  prefillSingleFdTemplateFromPi,
   validateSingleFdPdf,
   validateFdAgainstPlanMaster,
 } from './services/compareApi';
@@ -267,10 +268,12 @@ export default function Dashboard({ onLogout }) {
   const [fdFileB, setFdFileB] = useState(null);
   const [piFile, setPiFile] = useState(null);
   const [fdSingleFile, setFdSingleFile] = useState(null);
-  const [viewMode, setViewMode] = useState('upload'); // 'upload', 'results', 'batch', 'quality', 'fdsingle'
+  const [fdPrefillFile, setFdPrefillFile] = useState(null);
+  const [viewMode, setViewMode] = useState('upload'); // 'upload', 'results', 'batch', 'quality', 'fdsingle', 'fdprefill'
   const [comparisonResult, setComparisonResult] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
   const [singleFdValidationResult, setSingleFdValidationResult] = useState(null);
+  const [singleFdPrefillResult, setSingleFdPrefillResult] = useState(null);
   const [resultTab, setResultTab] = useState('visual');
   const [loading, setLoading] = useState(false);
   const [activeAction, setActiveAction] = useState(null);
@@ -295,6 +298,7 @@ export default function Dashboard({ onLogout }) {
   const fdBInputRef = useRef(null);
   const piInputRef = useRef(null);
   const fdSingleInputRef = useRef(null);
+  const fdPrefillInputRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -329,6 +333,10 @@ export default function Dashboard({ onLogout }) {
     if (type === 'fdSingle') {
       setFdSingleFile(file);
       setSingleFdValidationResult(null);
+    }
+    if (type === 'fdPrefill') {
+      setFdPrefillFile(file);
+      setSingleFdPrefillResult(null);
     }
   };
 
@@ -442,6 +450,28 @@ export default function Dashboard({ onLogout }) {
     }
   };
 
+  const handleRunSingleFdPrefill = async () => {
+    if (!fdPrefillFile) {
+      setError('Selecteaza un PDF pentru precompletare.');
+      return;
+    }
+
+    setLoading(true);
+    setActiveAction('fd-prefill');
+    setError('');
+    setSingleFdPrefillResult(null);
+
+    try {
+      const response = await prefillSingleFdTemplateFromPi(fdPrefillFile);
+      setSingleFdPrefillResult(response);
+    } catch (err) {
+      setError(err.message || 'Precompletarea fisei a esuat.');
+    } finally {
+      setLoading(false);
+      setActiveAction(null);
+    }
+  };
+
   const changes = comparisonResult?.changes || [];
   const globalLeftTokenSet = new Set(
     changes
@@ -475,6 +505,7 @@ export default function Dashboard({ onLogout }) {
       ? Object.entries(singleFdValidationResult.math_errors)
       : [];
   const fdSingleCanonical = singleFdValidationResult?.fisa_canonical || null;
+  const fdPrefillMatchedDiscipline = singleFdPrefillResult?.matched_discipline || '-';
   const resultTitle = resultTab === 'validation' ? 'FD vs Plan Master Differences' : 'Side-by-Side Visual Comparison';
 
   const handleShowSubjectCompetencies = async () => {
@@ -531,6 +562,12 @@ export default function Dashboard({ onLogout }) {
             onClick={() => setViewMode('fdsingle')}
           >
             FD Validator
+          </button>
+          <button
+            className={`${styles.navButton} ${viewMode === 'fdprefill' ? styles.activeNav : ''}`}
+            onClick={() => setViewMode('fdprefill')}
+          >
+            FD Prefill
           </button>
         </div>
         <button className={styles.logoutButton} onClick={onLogout}>
@@ -858,6 +895,81 @@ export default function Dashboard({ onLogout }) {
                     )}
                   </article>
                 </div>
+              </section>
+            ) : null}
+          </section>
+        ) : viewMode === 'fdprefill' ? (
+          <section className={styles.uploadSection}>
+            <h1 className={styles.sectionTitle}>Single FD Template Prefill</h1>
+            <p className={styles.infoText}>
+              Incarca un PDF de fisa disciplina si genereaza un template FD precompletat,
+              apoi exporta direct in Word pentru modificari.
+            </p>
+
+            {error && <div className={styles.errorBox}>{error}</div>}
+
+            <div className={styles.fdSingleUploadWrap}>
+              <div
+                className={`${styles.uploadCard} ${fdPrefillFile ? styles.fileSelected : ''}`}
+                onClick={() => fdPrefillInputRef.current?.click()}
+              >
+                <div className={styles.uploadIcon}>{fdPrefillFile ? <CheckCircleIcon /> : <UploadIcon />}</div>
+                <h3>FD PDF</h3>
+                <p>{fdPrefillFile ? fdPrefillFile.name : 'Upload fisa disciplinei'}</p>
+                <input
+                  ref={fdPrefillInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  className={styles.hiddenInput}
+                  onChange={(event) => handleFileChange(event, 'fdPrefill')}
+                />
+              </div>
+            </div>
+
+            <div className={styles.buttonRow}>
+              <button
+                className={styles.analyzeButton}
+                onClick={handleRunSingleFdPrefill}
+                disabled={!fdPrefillFile || loading}
+              >
+                {loading && activeAction === 'fd-prefill' ? 'Se genereaza...' : 'Genereaza template precompletat'}
+              </button>
+            </div>
+
+            {singleFdPrefillResult ? (
+              <section className={styles.fdResultPanel}>
+                <div className={styles.metricGrid}>
+                  <MetricCard label="Status" value={singleFdPrefillResult.status?.toUpperCase() || '-'} />
+                  <MetricCard label="Disciplina" value={fdPrefillMatchedDiscipline} />
+                </div>
+
+                <div className={`${styles.fdResultStatus} ${styles.fdResultStatusOk}`}>
+                  Template-ul FD a fost generat cu succes.
+                </div>
+
+                {singleFdPrefillResult.output_html_url || singleFdPrefillResult.output_docx_url ? (
+                  <div className={styles.buttonRow}>
+                    {singleFdPrefillResult.output_html_url ? (
+                      <a
+                        className={styles.actionLinkButton}
+                        href={singleFdPrefillResult.output_html_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Deschide template-ul precompletat
+                      </a>
+                    ) : null}
+                    {singleFdPrefillResult.output_docx_url ? (
+                      <a
+                        className={styles.secondaryActionLinkButton}
+                        href={singleFdPrefillResult.output_docx_url}
+                        download
+                      >
+                        Export Word (.docx)
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
               </section>
             ) : null}
           </section>

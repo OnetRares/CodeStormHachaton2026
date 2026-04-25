@@ -4,6 +4,8 @@ import os
 import contextlib
 import ssl
 import re
+import json
+import sqlite3
 import tempfile
 from pathlib import Path
 import unicodedata
@@ -14,6 +16,13 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+
+try:
+    from docx import Document
+    WORD_EXPORT_IMPORT_ERROR = None
+except ModuleNotFoundError as exc:
+    Document = None
+    WORD_EXPORT_IMPORT_ERROR = exc
 
 try:
     from pdf_visual_compare import (
@@ -83,6 +92,36 @@ except ModuleNotFoundError:
         load_fd_from_input = None
         run_validation = None
         FD_VALIDATOR_IMPORT_ERROR = exc
+
+try:
+    from fd_single_prefill_from_pi import (
+        build_single_fd_html,
+        choose_best_plan_match,
+        extract_text_native as extract_fd_single_prefill_text,
+        is_auto_code,
+        load_plan_rows as load_prefill_plan_rows,
+        parse_fd_probe,
+    )
+    FD_SINGLE_PREFILL_IMPORT_ERROR = None
+except ModuleNotFoundError:
+    try:
+        from backend.fd_single_prefill_from_pi import (
+            build_single_fd_html,
+            choose_best_plan_match,
+            extract_text_native as extract_fd_single_prefill_text,
+            is_auto_code,
+            load_plan_rows as load_prefill_plan_rows,
+            parse_fd_probe,
+        )
+        FD_SINGLE_PREFILL_IMPORT_ERROR = None
+    except ModuleNotFoundError as exc:
+        build_single_fd_html = None
+        choose_best_plan_match = None
+        extract_fd_single_prefill_text = None
+        is_auto_code = None
+        load_prefill_plan_rows = None
+        parse_fd_probe = None
+        FD_SINGLE_PREFILL_IMPORT_ERROR = exc
 
 app = FastAPI(title="PDF Ingestion & Validation Service", version="2.0.0")
 BASE_DIR = Path(__file__).resolve().parent
@@ -220,6 +259,22 @@ def _ensure_fd_validator_dependencies() -> None:
     )
 
 
+def _ensure_fd_single_prefill_dependencies() -> None:
+    missing_dependency_error = FD_SINGLE_PREFILL_IMPORT_ERROR or WORD_EXPORT_IMPORT_ERROR
+    if missing_dependency_error is None:
+        return
+
+    raise HTTPException(
+        status_code=500,
+        detail={
+            "status": "error",
+            "message": "missing_backend_dependency",
+            "error": str(missing_dependency_error),
+            "hint": "Install backend requirements to use single FD prefill + Word export endpoint.",
+        },
+    )
+
+
 def _resolve_existing_path(raw_path: str) -> Path:
     candidate = Path(raw_path).expanduser()
     if candidate.exists():
@@ -234,6 +289,94 @@ def _resolve_existing_path(raw_path: str) -> Path:
         return fallback_data
 
     raise FileNotFoundError(f"Path not found: {raw_path}")
+
+
+def _string_value(value: str | int | None) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _append_docx_section(document, title: str, rows: list[tuple[str, str | int | None]]) -> None:
+    heading = document.add_paragraph()
+    heading_run = heading.add_run(title)
+    heading_run.bold = True
+
+    table = document.add_table(rows=1, cols=2)
+    table.style = "Table Grid"
+    table.rows[0].cells[0].text = "Camp"
+    table.rows[0].cells[1].text = "Valoare"
+
+    for label, value in rows:
+        cells = table.add_row().cells
+        cells[0].text = _string_value(label)
+        cells[1].text = _string_value(value)
+
+
+def _build_single_fd_docx(plan_row, debug_source: str, output_docx_path: Path) -> None:
+    document = Document()
+    cod_value = plan_row.cod if not is_auto_code(plan_row.cod) else ""
+
+    document.add_heading("Fisa Disciplinei", level=1)
+    document.add_paragraph(f"Denumirea disciplinei: {_string_value(plan_row.nume) or '-'}")
+    document.add_paragraph(f"Sursa precompletare: {debug_source}")
+
+    _append_docx_section(
+        document,
+        "1. Date despre program",
+        [
+            ("1.1 Institutia de invatamant superior", ""),
+            ("1.2 Facultatea", ""),
+            ("1.3 Departamentul", ""),
+            ("1.4 Domeniul de studii de licenta", ""),
+            ("1.5 Ciclul de studii", ""),
+            ("1.6 Programul de studii / Calificarea", ""),
+        ],
+    )
+    _append_docx_section(
+        document,
+        "2. Date despre disciplina",
+        [
+            ("2.0 Cod disciplina", cod_value),
+            ("2.1 Denumirea disciplinei", plan_row.nume),
+            ("2.2 Titularul activitatilor de curs", ""),
+            ("2.3 Titularul activitatilor de seminar/laborator/proiect", ""),
+            ("2.4 Anul de studiu", ""),
+            ("2.5 Semestrul", plan_row.semestru),
+            ("2.6 Tipul de evaluare", ""),
+            ("2.7 Regimul disciplinei", ""),
+        ],
+    )
+    _append_docx_section(
+        document,
+        "3. Timpul total estimat (ore pe semestru)",
+        [
+            ("3.1 Numar de ore pe saptamana", ""),
+            ("3.4 Total ore din planul de invatamant", ""),
+            ("3.8 Total ore pe semestru", ""),
+            ("3.9 Numarul de credite", plan_row.credite),
+        ],
+    )
+    _append_docx_section(document, "4. Preconditii", [("Detalii", "")])
+    _append_docx_section(document, "5. Conditii", [("Detalii", "")])
+    _append_docx_section(document, "6. Competente specifice acumulate", [("Detalii", "")])
+    _append_docx_section(document, "7. Obiectivele disciplinei", [("Detalii", "")])
+    _append_docx_section(document, "8.1 Curs", [("Detalii", "")])
+    _append_docx_section(document, "8.2 Seminar / laborator / proiect", [("Detalii", "")])
+    _append_docx_section(document, "9. Coroborarea continuturilor disciplinei", [("Detalii", "")])
+    _append_docx_section(
+        document,
+        "10. Evaluare",
+        [
+            ("Tip activitate", "Standarde minime de performanta"),
+            ("Curs", ""),
+            ("Seminar/Laborator", ""),
+            ("Proiect", ""),
+        ],
+    )
+
+    output_docx_path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(output_docx_path)
 
 
 # ---------------------------------------------------------------------------
@@ -545,6 +688,154 @@ async def validate_fd_single(
                     "error": str(exc),
                 },
             ) from exc
+
+
+def _prefill_single_fd_template_blocking(fisa_tmp: Path, db_path: str) -> dict:
+    resolved_db_path = _resolve_existing_path(db_path)
+    raw_text = extract_fd_single_prefill_text(fisa_tmp)
+    probe = parse_fd_probe(raw_text)
+
+    with sqlite3.connect(resolved_db_path) as conn:
+        plan_rows = load_prefill_plan_rows(conn)
+
+    matched, strategy, score = choose_best_plan_match(probe, plan_rows)
+    if not matched:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "status": "error",
+                "message": "Nu am putut identifica disciplina in planul de invatamant.",
+            },
+        )
+
+    COMPARE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    report_name = f"fd_single_prefill_{uuid4().hex}.html"
+    report_path = COMPARE_OUTPUT_DIR / report_name
+    docx_name = f"fd_single_prefill_{uuid4().hex}.docx"
+    docx_path = COMPARE_OUTPUT_DIR / docx_name
+    debug_name = f"fd_single_prefill_{uuid4().hex}.json"
+    debug_path = COMPARE_OUTPUT_DIR / debug_name
+
+    html_content = build_single_fd_html(matched, debug_source=f"PI/{strategy}")
+    report_path.write_text(html_content, encoding="utf-8")
+    _build_single_fd_docx(matched, debug_source=f"PI/{strategy}", output_docx_path=docx_path)
+
+    debug_payload = {
+        "status": "success",
+        "message": "single_fd_prefilled_from_pi",
+        "db_path": str(resolved_db_path),
+        "match_strategy": strategy,
+        "score": round(float(score), 4),
+        "probe": probe.__dict__,
+        "matched_plan": {
+            "rowid": matched.rowid,
+            "cod": matched.cod,
+            "nume": matched.nume,
+            "semestru": matched.semestru,
+            "credite": matched.credite,
+        },
+        "output_html_url": f"/prefill/fd-single-report/{report_name}",
+        "output_docx_url": f"/prefill/fd-single-docx/{docx_name}",
+        "output_html_path": str(report_path),
+        "output_docx_path": str(docx_path),
+        "output_json_path": str(debug_path),
+    }
+    debug_path.write_text(json.dumps(debug_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "status": "success",
+        "message": "single_fd_prefilled_from_pi",
+        "matched_discipline": matched.nume,
+        "output_html_url": f"/prefill/fd-single-report/{report_name}",
+        "output_docx_url": f"/prefill/fd-single-docx/{docx_name}",
+    }
+
+
+@app.post("/prefill/fd-single-template")
+async def prefill_fd_single_template(
+    fisa_pdf: UploadFile = File(..., description="PDF cu o singura Fisa de Disciplina"),
+) -> dict:
+    _ensure_fd_single_prefill_dependencies()
+
+    with save_upload_to_temp_path(fisa_pdf) as fisa_tmp:
+        try:
+            result = await run_in_threadpool(
+                _prefill_single_fd_template_blocking,
+                fisa_tmp=fisa_tmp,
+                db_path="data/discipline.db",
+            )
+            return result
+        except HTTPException:
+            raise
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "error",
+                    "message": "database_not_found",
+                    "error": str(exc),
+                },
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "status": "error",
+                    "message": "single_fd_prefill_failed",
+                    "error": str(exc),
+                },
+            ) from exc
+
+
+@app.get("/prefill/fd-single-report/{report_name}")
+def get_fd_single_prefill_report(report_name: str):
+    safe_name = Path(report_name).name
+    if (
+        safe_name != report_name
+        or not safe_name.endswith(".html")
+        or not safe_name.startswith("fd_single_prefill_")
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "message": "invalid_report_name"},
+        )
+
+    report_path = COMPARE_OUTPUT_DIR / safe_name
+    if not report_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail={"status": "error", "message": "report_not_found"},
+        )
+
+    return FileResponse(report_path, media_type="text/html")
+
+
+@app.get("/prefill/fd-single-docx/{docx_name}")
+def get_fd_single_prefill_docx(docx_name: str):
+    safe_name = Path(docx_name).name
+    if (
+        safe_name != docx_name
+        or not safe_name.endswith(".docx")
+        or not safe_name.startswith("fd_single_prefill_")
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "message": "invalid_docx_name"},
+        )
+
+    docx_path = COMPARE_OUTPUT_DIR / safe_name
+    if not docx_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail={"status": "error", "message": "docx_not_found"},
+        )
+
+    return FileResponse(
+        docx_path,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=safe_name,
+    )
+
 
 @app.post("/batch-update")
 async def batch_update(

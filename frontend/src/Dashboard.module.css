@@ -190,6 +190,50 @@
   box-shadow: none;
 }
 
+.actionLinkButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border-radius: 999px;
+  width: min(100%, 390px);
+  padding: 0.92rem 1.6rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #f8fafc;
+  background: linear-gradient(135deg, #0f172a, #0e7490, #0284c7);
+  box-shadow: 0 12px 24px rgba(2, 132, 199, 0.28);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.actionLinkButton:hover {
+  transform: translateY(-2px);
+}
+
+.secondaryActionLinkButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border-radius: 999px;
+  width: min(100%, 390px);
+  padding: 0.92rem 1.6rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #f8fafc;
+  background: linear-gradient(135deg, #334155, #475569);
+  box-shadow: 0 10px 20px rgba(51, 65, 85, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.secondaryActionLinkButton:hover {
+  transform: translateY(-2px);
+}
+
 .hiddenInput {
   display: none;
 }
