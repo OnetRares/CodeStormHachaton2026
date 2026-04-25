@@ -14,6 +14,22 @@ function normalizeErrorPayload(payload) {
   return 'Failed to compare PDF files.';
 }
 
+function normalizeValidationErrorPayload(payload) {
+  if (!payload) return 'Validation failed.';
+  if (typeof payload === 'string') return payload;
+
+  const detail = payload.detail;
+  if (typeof detail === 'string') return detail;
+  if (detail?.message) return detail.message;
+
+  if (Array.isArray(detail?.errors) && detail.errors.length > 0) {
+    return detail.errors.join('; ');
+  }
+
+  if (payload.message) return payload.message;
+  return 'Validation failed.';
+}
+
 function toAbsoluteUrl(urlPath) {
   if (!urlPath) return null;
   if (urlPath.startsWith('http://') || urlPath.startsWith('https://')) {
@@ -41,5 +57,60 @@ export async function comparePdfsVisual(leftPdf, rightPdf) {
   return {
     ...payload,
     html_report_url: toAbsoluteUrl(payload?.html_report_url),
+  };
+}
+
+export async function validateFdAgainstPlanMaster(fisaPdf, planPdf, options = {}) {
+  const formData = new FormData();
+  formData.append('fisa_pdf', fisaPdf);
+  formData.append('plan_pdf', planPdf);
+
+  if (typeof options.is_fisa_scanned === 'boolean') {
+    formData.append('is_fisa_scanned', String(options.is_fisa_scanned));
+  }
+  if (typeof options.is_plan_scanned === 'boolean') {
+    formData.append('is_plan_scanned', String(options.is_plan_scanned));
+  }
+  if (typeof options.ocr_lang === 'string' && options.ocr_lang.trim() !== '') {
+    formData.append('ocr_lang', options.ocr_lang.trim());
+  }
+
+  const response = await fetch(`${API_BASE_URL}/validate`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(normalizeValidationErrorPayload(payload));
+  }
+
+  return payload;
+}
+
+export async function fetchCompetencySubjects() {
+  const response = await fetch(`${API_BASE_URL}/competencies/subjects`);
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(normalizeValidationErrorPayload(payload));
+  }
+
+  return Array.isArray(payload?.subjects) ? payload.subjects : [];
+}
+
+export async function fetchRecommendedCompetencies(subject) {
+  const query = new URLSearchParams({ subject: String(subject || '').trim() });
+  const response = await fetch(`${API_BASE_URL}/competencies/recommend?${query.toString()}`);
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(normalizeValidationErrorPayload(payload));
+  }
+
+  return {
+    subject: payload?.subject || String(subject || '').trim(),
+    competencies: Array.isArray(payload?.competencies) ? payload.competencies : [],
+    count: Number(payload?.count || 0),
   };
 }

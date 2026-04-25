@@ -1,6 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import styles from './Dashboard.module.css';
-import { comparePdfsVisual } from './services/compareApi';
+import {
+  comparePdfsVisual,
+  fetchCompetencySubjects,
+  fetchRecommendedCompetencies,
+  validateFdAgainstPlanMaster,
+} from './services/compareApi';
 
 const UploadIcon = () => (
   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -38,6 +43,24 @@ function getStatusClass(side, isMissing) {
   }
 
   return 'noHighlight';
+}
+
+function getValidationCardClass(severity) {
+  if (severity === 'eroare') return styles.severityError;
+  if (severity === 'avertisment') return styles.severityWarning;
+  return styles.severityOk;
+}
+
+function getSeverityLabel(severity) {
+  if (severity === 'eroare') return 'EROARE';
+  if (severity === 'avertisment') return 'AVERTISMENT';
+  return 'OK';
+}
+
+function formatDetailValue(value) {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
 }
 
 function sanitizeLines(lines) {
@@ -230,12 +253,43 @@ export default function Dashboard({ onLogout }) {
   const [piFile, setPiFile] = useState(null);
   const [viewMode, setViewMode] = useState('upload');
   const [comparisonResult, setComparisonResult] = useState(null);
+  const [validationResult, setValidationResult] = useState(null);
+  const [resultTab, setResultTab] = useState('visual');
   const [loading, setLoading] = useState(false);
+  const [activeAction, setActiveAction] = useState(null);
   const [error, setError] = useState('');
+  const [competenceSubjects, setCompetenceSubjects] = useState([]);
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedCompetencies, setSelectedCompetencies] = useState([]);
+  const [competenceLookupMessage, setCompetenceLookupMessage] = useState('');
+  const [competenceLoading, setCompetenceLoading] = useState(false);
 
   const fdAInputRef = useRef(null);
   const fdBInputRef = useRef(null);
   const piInputRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCompetencySubjects = async () => {
+      try {
+        const subjects = await fetchCompetencySubjects();
+        if (cancelled) return;
+        setCompetenceSubjects(subjects);
+        if (subjects.length === 0) {
+          setCompetenceLookupMessage('Nu exista materii disponibile momentan.');
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setCompetenceLookupMessage(err.message || 'Nu am putut incarca lista de materii.');
+      }
+    };
+
+    loadCompetencySubjects();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleFileChange = (event, type) => {
     const file = event.target.files[0];
@@ -253,16 +307,42 @@ export default function Dashboard({ onLogout }) {
     }
 
     setLoading(true);
+    setActiveAction('visual');
     setError('');
 
     try {
       const response = await comparePdfsVisual(fdFileA, fdFileB);
       setComparisonResult(response);
+      setResultTab('visual');
       setViewMode('results');
     } catch (err) {
       setError(err.message || 'Comparison failed. Try again.');
     } finally {
       setLoading(false);
+      setActiveAction(null);
+    }
+  };
+
+  const handleRunPlanValidation = async () => {
+    if (!fdFileA || !piFile) {
+      setError('Select PDF Version A and Plan Master before validating.');
+      return;
+    }
+
+    setLoading(true);
+    setActiveAction('validation');
+    setError('');
+
+    try {
+      const response = await validateFdAgainstPlanMaster(fdFileA, piFile);
+      setValidationResult(response);
+      setResultTab('validation');
+      setViewMode('results');
+    } catch (err) {
+      setError(err.message || 'Validation failed. Try again.');
+    } finally {
+      setLoading(false);
+      setActiveAction(null);
     }
   };
 
@@ -276,6 +356,36 @@ export default function Dashboard({ onLogout }) {
   );
   const alignedChanges = changes.map((block) => alignBlockRows(block, globalLeftTokenSet)).filter(Boolean);
   const summary = comparisonResult?.summary;
+  const validationSummary = validationResult?.sumar;
+  const validationRows = Array.isArray(validationResult?.rezultate) ? validationResult.rezultate : [];
+  const subjectOptions = competenceSubjects;
+  const resultTitle = resultTab === 'validation' ? 'FD vs Plan Master Differences' : 'Side-by-Side Visual Comparison';
+
+  const handleShowSubjectCompetencies = async () => {
+    if (!selectedSubject) {
+      setSelectedCompetencies([]);
+      setCompetenceLookupMessage('Selecteaza o materie pentru a afisa competentele.');
+      return;
+    }
+
+    setCompetenceLoading(true);
+    try {
+      const response = await fetchRecommendedCompetencies(selectedSubject);
+      const competencies = response?.competencies || [];
+      setSelectedCompetencies(competencies);
+
+      if (competencies.length === 0) {
+        setCompetenceLookupMessage(`Nu exista competente recomandate pentru materia "${selectedSubject}".`);
+      } else {
+        setCompetenceLookupMessage(`Competente recomandate pentru "${selectedSubject}" (${competencies.length}).`);
+      }
+    } catch (err) {
+      setSelectedCompetencies([]);
+      setCompetenceLookupMessage(err.message || 'Nu am putut obtine competentele pentru materia selectata.');
+    } finally {
+      setCompetenceLoading(false);
+    }
+  };
 
   return (
     <div className={styles.container}>
@@ -334,11 +444,61 @@ export default function Dashboard({ onLogout }) {
               </div>
             </div>
 
-            <p className={styles.infoText}>The visual comparison button uses PDF A and PDF B. The third field stays available in the form.</p>
+            <p className={styles.infoText}>
+              Use the first button for visual compare (PDF A vs PDF B). Use the second button for
+              FD corelation against Plan Master (PDF A vs Plan Master).
+            </p>
+
+            <section className={styles.competenceFinderCard}>
+              <h3 className={styles.competenceFinderTitle}>Recomandare competente pe materie</h3>
+              <div className={styles.competenceFinderControls}>
+                <select
+                  className={styles.subjectSelect}
+                  value={selectedSubject}
+                  onChange={(event) => {
+                    setSelectedSubject(event.target.value);
+                    setSelectedCompetencies([]);
+                    setCompetenceLookupMessage('');
+                  }}
+                  disabled={subjectOptions.length === 0}
+                >
+                  <option value="">Selecteaza o materie</option>
+                  {subjectOptions.map((subject) => (
+                    <option key={subject} value={subject}>{subject}</option>
+                  ))}
+                </select>
+                <button
+                  className={styles.findCompetenceButton}
+                  onClick={handleShowSubjectCompetencies}
+                  disabled={subjectOptions.length === 0 || !selectedSubject || competenceLoading}
+                >
+                  {competenceLoading ? 'Se cauta...' : 'Arata competente'}
+                </button>
+              </div>
+              {competenceLookupMessage ? (
+                <p className={styles.competenceLookupMessage}>{competenceLookupMessage}</p>
+              ) : null}
+              {selectedCompetencies.length > 0 ? (
+                <div className={styles.competenceWrap}>
+                  {selectedCompetencies.map((itemCompetence, competenceIndex) => (
+                    <span key={`selected-comp-${competenceIndex}`} className={styles.competenceTag}>
+                      {itemCompetence}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </section>
 
             <div className={styles.buttonRow}>
               <button className={styles.analyzeButton} onClick={handleStartAnalysis} disabled={!fdFileA || !fdFileB || loading}>
-                {loading ? 'Processing...' : 'Run Visual Comparison'}
+                {loading && activeAction === 'visual' ? 'Processing...' : 'Run Visual Comparison'}
+              </button>
+              <button
+                className={styles.secondaryButton}
+                onClick={handleRunPlanValidation}
+                disabled={!fdFileA || !piFile || loading}
+              >
+                {loading && activeAction === 'validation' ? 'Processing...' : 'Show FD vs Plan Differences'}
               </button>
             </div>
           </section>
@@ -348,8 +508,8 @@ export default function Dashboard({ onLogout }) {
               <button className={styles.backButton} onClick={() => setViewMode('upload')}>
                 Back to Upload
               </button>
-              <h2>Side-by-Side Visual Comparison</h2>
-              {comparisonResult?.html_report_url ? (
+              <h2>{resultTitle}</h2>
+              {resultTab === 'visual' && comparisonResult?.html_report_url ? (
                 <a className={styles.reportButton} href={comparisonResult.html_report_url} target="_blank" rel="noreferrer">
                   Open HTML Report
                 </a>
@@ -358,67 +518,156 @@ export default function Dashboard({ onLogout }) {
               )}
             </div>
 
-            {summary && (
-              <div className={styles.metricGrid}>
-                <MetricCard label="Similarity" value={`${(summary.similarity_ratio * 100).toFixed(2)}%`} />
-                <MetricCard label="Equal" value={summary.equal_lines} />
-                <MetricCard label="Modified" value={summary.replaced_lines} />
-                <MetricCard label="A-only" value={summary.deleted_lines} />
-                <MetricCard label="B-only" value={summary.inserted_lines} />
-              </div>
+            <div className={styles.resultSwitch}>
+              <button
+                className={`${styles.switchButton} ${resultTab === 'visual' ? styles.switchButtonActive : ''}`}
+                onClick={() => setResultTab('visual')}
+                disabled={!comparisonResult}
+              >
+                Visual Compare
+              </button>
+              <button
+                className={`${styles.switchButton} ${resultTab === 'validation' ? styles.switchButtonActive : ''}`}
+                onClick={() => setResultTab('validation')}
+                disabled={!validationResult}
+              >
+                FD vs Plan Master
+              </button>
+            </div>
+
+            {resultTab === 'visual' && (
+              <>
+                {summary && (
+                  <div className={styles.metricGrid}>
+                    <MetricCard label="Similarity" value={`${(summary.similarity_ratio * 100).toFixed(2)}%`} />
+                    <MetricCard label="Equal" value={summary.equal_lines} />
+                    <MetricCard label="Modified" value={summary.replaced_lines} />
+                    <MetricCard label="A-only" value={summary.deleted_lines} />
+                    <MetricCard label="B-only" value={summary.inserted_lines} />
+                  </div>
+                )}
+
+                <div className={styles.diffWrapper}>
+                  <div className={styles.diffColumn}>
+                    <div className={styles.columnLabel}>VERSION A (REFERINTA)</div>
+                    <div className={styles.lineArea}>
+                      {alignedChanges.length === 0 ? (
+                        <div className={styles.emptyState}>No differences found.</div>
+                      ) : (
+                        alignedChanges.map((block, blockIndex) => (
+                          <div key={`left-${blockIndex}`} className={styles.changeBlock}>
+                            <div className={styles.blockTitle}>{getChangeLabel(block.type)}</div>
+                            {block.rows.map((row, rowIndex) => {
+                              const leftClassName = styles[getStatusClass('left', row.left.missing)];
+                              return (
+                                <div key={`left-line-${blockIndex}-${rowIndex}`} className={`${styles.diffLine} ${leftClassName}`}>
+                                  <span className={styles.lineNum}>{row.left.lineNumber}</span>
+                                  <span className={styles.lineText}>{row.left.text}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={styles.diffColumn}>
+                    <div className={styles.columnLabel}>VERSION B (COMPARAT)</div>
+                    <div className={styles.lineArea}>
+                      {alignedChanges.length === 0 ? (
+                        <div className={styles.emptyState}>No differences found.</div>
+                      ) : (
+                        alignedChanges.map((block, blockIndex) => (
+                          <div key={`right-${blockIndex}`} className={styles.changeBlock}>
+                            <div className={styles.blockTitle}>{getChangeLabel(block.type)}</div>
+                            {block.rows.map((row, rowIndex) => {
+                              const rightClassName = styles[getStatusClass('right', row.right.missing)];
+                              return (
+                                <div key={`right-line-${blockIndex}-${rowIndex}`} className={`${styles.diffLine} ${rightClassName}`}>
+                                  <span className={styles.lineNum}>{row.right.lineNumber}</span>
+                                  <span className={styles.lineText}>
+                                    <VersionBText rightLine={row.right} />
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
 
-            <div className={styles.diffWrapper}>
-              <div className={styles.diffColumn}>
-                <div className={styles.columnLabel}>VERSION A (REFERINTA)</div>
-                <div className={styles.lineArea}>
-                  {alignedChanges.length === 0 ? (
-                    <div className={styles.emptyState}>No differences found.</div>
-                  ) : (
-                    alignedChanges.map((block, blockIndex) => (
-                      <div key={`left-${blockIndex}`} className={styles.changeBlock}>
-                        <div className={styles.blockTitle}>{getChangeLabel(block.type)}</div>
-                        {block.rows.map((row, rowIndex) => {
-                          const leftClassName = styles[getStatusClass('left', row.left.missing)];
-                          return (
-                            <div key={`left-line-${blockIndex}-${rowIndex}`} className={`${styles.diffLine} ${leftClassName}`}>
-                              <span className={styles.lineNum}>{row.left.lineNumber}</span>
-                              <span className={styles.lineText}>{row.left.text}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+            {resultTab === 'validation' && (
+              <div className={styles.validationContainer}>
+                {validationSummary ? (
+                  <div className={styles.metricGrid}>
+                    <MetricCard label="Total FD" value={validationSummary.total_fise} />
+                    <MetricCard label="Total Plan" value={validationSummary.total_discipline_plan} />
+                    <MetricCard label="Erori" value={validationSummary.erori} />
+                    <MetricCard label="Avertismente" value={validationSummary.avertismente} />
+                    <MetricCard label="OK" value={validationSummary.ok} />
+                  </div>
+                ) : null}
 
-              <div className={styles.diffColumn}>
-                <div className={styles.columnLabel}>VERSION B (COMPARAT)</div>
-                <div className={styles.lineArea}>
-                  {alignedChanges.length === 0 ? (
-                    <div className={styles.emptyState}>No differences found.</div>
-                  ) : (
-                    alignedChanges.map((block, blockIndex) => (
-                      <div key={`right-${blockIndex}`} className={styles.changeBlock}>
-                        <div className={styles.blockTitle}>{getChangeLabel(block.type)}</div>
-                        {block.rows.map((row, rowIndex) => {
-                          const rightClassName = styles[getStatusClass('right', row.right.missing)];
-                          return (
-                            <div key={`right-line-${blockIndex}-${rowIndex}`} className={`${styles.diffLine} ${rightClassName}`}>
-                              <span className={styles.lineNum}>{row.right.lineNumber}</span>
-                              <span className={styles.lineText}>
-                                <VersionBText rightLine={row.right} />
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))
-                  )}
+                <div className={styles.validationSourceRow}>
+                  <span>Sursa plan: {validationResult?.sursa_plan || '-'}</span>
+                  <span>Discipline extrase PI: {validationResult?.plan_extras ?? '-'}</span>
                 </div>
+
+                {validationRows.length === 0 ? (
+                  <div className={styles.emptyState}>No validation results yet.</div>
+                ) : (
+                  <div className={styles.validationList}>
+                    {validationRows.map((item, index) => {
+                      const details = Object.entries(item?.detalii || {});
+                      const competencies = Array.isArray(item?.competente_recomandate) ? item.competente_recomandate : [];
+
+                      return (
+                        <article key={`validation-${index}`} className={`${styles.validationCard} ${getValidationCardClass(item?.severitate)}`}>
+                          <div className={styles.validationTopRow}>
+                            <span className={styles.validationBadge}>{getSeverityLabel(item?.severitate)}</span>
+                            <span className={styles.validationType}>{item?.tip || 'tip_necunoscut'}</span>
+                          </div>
+
+                          <h3 className={styles.validationTitle}>{item?.nume_fisa || 'Disciplina'}</h3>
+                          <p className={styles.validationMessage}>{item?.mesaj || '-'}</p>
+
+                          <div className={styles.validationMetaRow}>
+                            <span>Cod FD: {item?.cod_fisa || '-'}</span>
+                            <span>Semestru FD: {item?.semestru_fisa ?? '-'}</span>
+                          </div>
+
+                          {details.length > 0 ? (
+                            <div className={styles.detailGrid}>
+                              {details.map(([key, value]) => (
+                                <div key={`${index}-${key}`} className={styles.detailItem}>
+                                  <span className={styles.detailKey}>{key}</span>
+                                  <span className={styles.detailValue}>{formatDetailValue(value)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {competencies.length > 0 ? (
+                            <div className={styles.competenceWrap}>
+                              {competencies.map((itemCompetence, competenceIndex) => (
+                                <span key={`${index}-comp-${competenceIndex}`} className={styles.competenceTag}>
+                                  {itemCompetence}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
+            )}
           </div>
         )}
       </main>

@@ -283,6 +283,33 @@ def _recomanda_competente(nume_disciplina: str) -> list[str]:
     return rezultat
 
 
+def recomanda_competente(nume_disciplina: str) -> list[str]:
+    """
+    Public helper used by API endpoints to fetch recommended competencies
+    for a single subject name.
+    """
+    return _recomanda_competente(nume_disciplina)
+
+
+def list_discipline_competente() -> list[str]:
+    """
+    Returns distinct subject names known by the PI competency map.
+    """
+    seen: set[str] = set()
+    subjects: list[str] = []
+
+    for comp in COMPETENTE_PI:
+        for disc in comp["discipline"]:
+            norm = _normalize(disc)
+            if not norm or norm in seen:
+                continue
+            seen.add(norm)
+            subjects.append(disc)
+
+    subjects.sort(key=_normalize)
+    return subjects
+
+
 def valideaza_nivel2(fise: list[FisaData], plan: list[PlanDisciplina]) -> RaportValidare:
     rezultate: list[RezultatValidare] = []
 
