@@ -67,6 +67,11 @@ try:
 except ImportError:
     batch_update_json_files = None
 
+try:
+    from check_weights_hours import check_db as check_weights_hours_db
+except ImportError:
+    check_weights_hours_db = None
+
 app = FastAPI(title="PDF Ingestion & Validation Service", version="2.0.0")
 BASE_DIR = Path(__file__).resolve().parent
 COMPARE_OUTPUT_DIR = BASE_DIR / "compare_output"
@@ -186,6 +191,22 @@ def _ensure_visual_compare_dependencies() -> None:
             "hint": "Install backend requirements to use visual compare endpoint.",
         },
     )
+
+
+def _resolve_existing_path(raw_path: str) -> Path:
+    candidate = Path(raw_path).expanduser()
+    if candidate.exists():
+        return candidate.resolve()
+
+    backend_candidate = (BASE_DIR / raw_path).resolve()
+    if backend_candidate.exists():
+        return backend_candidate
+
+    fallback_data = (BASE_DIR / "data" / Path(raw_path).name).resolve()
+    if fallback_data.exists():
+        return fallback_data
+
+    raise FileNotFoundError(f"Path not found: {raw_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -497,3 +518,38 @@ async def batch_update(
                 "error": str(exc),
             },
         )
+
+@app.get("/checks/weights-hours")
+async def check_weights_and_hours(
+    db_path: str = "data/discipline_new.db",
+) -> dict:
+    if check_weights_hours_db is None:
+        raise HTTPException(
+            status_code=501,
+            detail="check_weights_hours service not available",
+        )
+
+    try:
+        resolved_db_path = _resolve_existing_path(db_path)
+        results = check_weights_hours_db(resolved_db_path)
+        if results.get("status") == "error":
+            raise FileNotFoundError(results.get("error", "Unknown database error"))
+        return results
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "status": "error",
+                "message": "database_not_found",
+                "error": str(exc),
+            },
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "message": "weights_hours_check_failed",
+                "error": str(exc),
+            },
+        ) from exc

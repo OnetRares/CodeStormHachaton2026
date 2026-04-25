@@ -4,6 +4,7 @@ import { batchUpdate } from './services/batchUpdateApi';
 import {
   comparePdfsVisual,
   fetchCompetencySubjects,
+  fetchWeightsHoursCheck,
   fetchRecommendedCompetencies,
   validateFdAgainstPlanMaster,
 } from './services/compareApi';
@@ -56,6 +57,18 @@ function getSeverityLabel(severity) {
   if (severity === 'eroare') return 'EROARE';
   if (severity === 'avertisment') return 'AVERTISMENT';
   return 'OK';
+}
+
+function getCheckStatusLabel(status) {
+  if (status === 'ok') return 'OK';
+  if (status === 'missing') return 'MISSING';
+  return 'NOT OK';
+}
+
+function getCheckStatusClass(status) {
+  if (status === 'ok') return styles.smallBadgeOk;
+  if (status === 'missing') return styles.smallBadgeMissing;
+  return styles.smallBadgeBad;
 }
 
 function formatDetailValue(value) {
@@ -252,7 +265,7 @@ export default function Dashboard({ onLogout }) {
   const [fdFileA, setFdFileA] = useState(null);
   const [fdFileB, setFdFileB] = useState(null);
   const [piFile, setPiFile] = useState(null);
-  const [viewMode, setViewMode] = useState('upload'); // 'upload', 'results', 'batch'
+  const [viewMode, setViewMode] = useState('upload'); // 'upload', 'results', 'batch', 'quality'
   const [comparisonResult, setComparisonResult] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
   const [resultTab, setResultTab] = useState('visual');
@@ -271,6 +284,9 @@ export default function Dashboard({ onLogout }) {
   const [batchResults, setBatchResults] = useState(null);
   const [targetJsonFile, setTargetJsonFile] = useState('fisa_disciplina_out.json');
   const [selectedBatchFile, setSelectedBatchFile] = useState('');
+  const [weightsHoursResult, setWeightsHoursResult] = useState(null);
+  const [weightsHoursDbPath, setWeightsHoursDbPath] = useState('data/discipline_new.db');
+  const [weightsHoursFilter, setWeightsHoursFilter] = useState('all');
 
   const fdAInputRef = useRef(null);
   const fdBInputRef = useRef(null);
@@ -378,6 +394,24 @@ export default function Dashboard({ onLogout }) {
     }
   };
 
+  const handleRunWeightsHoursCheck = async () => {
+    setLoading(true);
+    setActiveAction('weights-hours');
+    setError('');
+    setWeightsHoursResult(null);
+
+    try {
+      const response = await fetchWeightsHoursCheck(weightsHoursDbPath);
+      setWeightsHoursResult(response);
+      setWeightsHoursFilter('all');
+    } catch (err) {
+      setError(err.message || 'Nu am putut rula verificarea de ponderi si ore.');
+    } finally {
+      setLoading(false);
+      setActiveAction(null);
+    }
+  };
+
   const changes = comparisonResult?.changes || [];
   const globalLeftTokenSet = new Set(
     changes
@@ -396,6 +430,13 @@ export default function Dashboard({ onLogout }) {
   const selectedSentenceExamples = Array.isArray(selectedBatchDetail?.sentence_examples)
     ? selectedBatchDetail.sentence_examples
     : [];
+  const weightsSummary = weightsHoursResult?.summary || null;
+  const weightsRows = Array.isArray(weightsHoursResult?.rows) ? weightsHoursResult.rows : [];
+  const filteredWeightsRows = weightsRows.filter((row) => {
+    if (weightsHoursFilter === 'ok') return row?.overall_status === 'ok';
+    if (weightsHoursFilter === 'not_ok') return row?.overall_status !== 'ok';
+    return true;
+  });
   const resultTitle = resultTab === 'validation' ? 'FD vs Plan Master Differences' : 'Side-by-Side Visual Comparison';
 
   const handleShowSubjectCompetencies = async () => {
@@ -440,6 +481,12 @@ export default function Dashboard({ onLogout }) {
             onClick={() => setViewMode('batch')}
           >
             Batch Update
+          </button>
+          <button
+            className={`${styles.navButton} ${viewMode === 'quality' ? styles.activeNav : ''}`}
+            onClick={() => setViewMode('quality')}
+          >
+            Weights & Hours
           </button>
         </div>
         <button className={styles.logoutButton} onClick={onLogout}>
@@ -559,6 +606,130 @@ export default function Dashboard({ onLogout }) {
                 )}
               </section>
             )}
+          </section>
+        ) : viewMode === 'quality' ? (
+          <section className={styles.uploadSection}>
+            <h1 className={styles.sectionTitle}>Weights & Hours Integrity Check</h1>
+            <p className={styles.infoText}>
+              Verifica daca orele sunt corecte (ore_saptamana * 14 = total_ore_plan)
+              si daca suma ponderilor este 100 pentru fiecare disciplina.
+            </p>
+
+            {error && <div className={styles.errorBox}>{error}</div>}
+
+            <div className={styles.batchForm}>
+              <div className={styles.inputGroup}>
+                <label>Database path</label>
+                <input
+                  type="text"
+                  value={weightsHoursDbPath}
+                  onChange={(event) => setWeightsHoursDbPath(event.target.value)}
+                  placeholder="Ex: data/discipline_new.db"
+                  className={styles.textInput}
+                />
+              </div>
+              <div className={styles.buttonRow}>
+                <button
+                  className={styles.analyzeButton}
+                  onClick={handleRunWeightsHoursCheck}
+                  disabled={loading}
+                >
+                  {loading && activeAction === 'weights-hours' ? 'Se verifica...' : 'Run Weights & Hours Check'}
+                </button>
+              </div>
+            </div>
+
+            {weightsHoursResult ? (
+              <section className={styles.qualityPanel}>
+                {weightsSummary ? (
+                  <div className={styles.metricGrid}>
+                    <MetricCard label="Discipline" value={weightsSummary.total} />
+                    <MetricCard label="OK" value={weightsSummary.ok} />
+                    <MetricCard label="Not OK" value={weightsSummary.not_ok} />
+                    <MetricCard label="Ore probleme" value={weightsSummary.hours_not_ok + weightsSummary.hours_missing} />
+                    <MetricCard label="Ponderi probleme" value={weightsSummary.weights_not_ok + weightsSummary.weights_missing} />
+                  </div>
+                ) : null}
+
+                <div className={styles.qualityToolbar}>
+                  <p className={styles.qualityMeta}>
+                    DB: <strong>{weightsHoursResult.db_path || '-'}</strong> | Saptamani: <strong>{weightsHoursResult.weeks ?? '-'}</strong>
+                  </p>
+                  <div className={styles.qualityFilterRow}>
+                    <button
+                      className={`${styles.filterButton} ${weightsHoursFilter === 'all' ? styles.filterButtonActive : ''}`}
+                      onClick={() => setWeightsHoursFilter('all')}
+                    >
+                      Toate
+                    </button>
+                    <button
+                      className={`${styles.filterButton} ${weightsHoursFilter === 'ok' ? styles.filterButtonActive : ''}`}
+                      onClick={() => setWeightsHoursFilter('ok')}
+                    >
+                      OK
+                    </button>
+                    <button
+                      className={`${styles.filterButton} ${weightsHoursFilter === 'not_ok' ? styles.filterButtonActive : ''}`}
+                      onClick={() => setWeightsHoursFilter('not_ok')}
+                    >
+                      Not OK
+                    </button>
+                  </div>
+                </div>
+
+                {filteredWeightsRows.length === 0 ? (
+                  <div className={styles.emptyState}>Nu exista rezultate pentru filtrul selectat.</div>
+                ) : (
+                  <div className={styles.qualityList}>
+                    {filteredWeightsRows.map((row) => {
+                      const weightsValues = Array.isArray(row?.weights?.values) ? row.weights.values : [];
+                      const weightsValuesText = weightsValues.length > 0 ? weightsValues.join(' + ') : '-';
+                      const hoursStatus = row?.hours?.status || 'missing';
+                      const weightsStatus = row?.weights?.status || 'missing';
+
+                      return (
+                        <article
+                          key={`weights-row-${row?.id ?? row?.cod ?? row?.nume}`}
+                          className={`${styles.qualityCard} ${row?.overall_status === 'ok' ? styles.qualityCardOk : styles.qualityCardBad}`}
+                        >
+                          <div className={styles.qualityTopRow}>
+                            <div>
+                              <h3 className={styles.qualityTitle}>{row?.nume || 'Disciplina'}</h3>
+                              <p className={styles.qualityMetaRow}>
+                                Cod: {row?.cod || '-'} | Semestru: {row?.semestru ?? '-'} | Credite: {row?.credite ?? '-'}
+                              </p>
+                            </div>
+                            <span className={`${styles.checkBadge} ${row?.overall_status === 'ok' ? styles.checkBadgeOk : styles.checkBadgeBad}`}>
+                              {row?.overall_status === 'ok' ? 'OK' : 'NOT OK'}
+                            </span>
+                          </div>
+
+                          <div className={styles.qualityCheckRow}>
+                            <span className={`${styles.smallBadge} ${getCheckStatusClass(hoursStatus)}`}>
+                              ORE {getCheckStatusLabel(hoursStatus)}
+                            </span>
+                            <span>{row?.hours?.message || '-'}</span>
+                          </div>
+                          <p className={styles.qualityHint}>
+                            Calcul: {row?.hours?.ore_saptamana ?? '-'} x {weightsHoursResult.weeks ?? '-'} = {row?.hours?.expected_total ?? '-'} | total_ore_plan: {row?.hours?.total_ore_plan ?? '-'}
+                          </p>
+
+                          <div className={styles.qualityCheckRow}>
+                            <span className={`${styles.smallBadge} ${getCheckStatusClass(weightsStatus)}`}>
+                              PONDERI {getCheckStatusLabel(weightsStatus)}
+                            </span>
+                            <span>{row?.weights?.message || '-'}</span>
+                          </div>
+                          <p className={styles.qualityHint}>
+                            Valori extrase: {weightsValuesText} | Suma: {row?.weights?.sum ?? '-'} | Sectiuni gasite: {row?.weights?.sections_found ?? 0} | Sursa: {row?.weights?.source || '-'}
+                          </p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            ) : null}
           </section>
         ) : viewMode === 'upload' ? (
           <section className={styles.uploadSection}>

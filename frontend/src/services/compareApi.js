@@ -114,3 +114,15 @@ export async function fetchRecommendedCompetencies(subject) {
     count: Number(payload?.count || 0),
   };
 }
+
+export async function fetchWeightsHoursCheck(dbPath = 'data/discipline_new.db') {
+  const query = new URLSearchParams({ db_path: String(dbPath || '').trim() || 'data/discipline_new.db' });
+  const response = await fetch(`${API_BASE_URL}/checks/weights-hours?${query.toString()}`);
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(normalizeValidationErrorPayload(payload));
+  }
+
+  return payload;
+}

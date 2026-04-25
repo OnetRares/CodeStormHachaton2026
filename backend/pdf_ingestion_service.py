@@ -30,10 +30,12 @@ class FisaData:
     credite: int
     evaluare: str
     evaluare_cod: str | None
+    ponderi: list[int]
     ore_saptamana: int | None
     total_ore_plan: int | None
     continut_descriere: str
     continut_curs: str
+    continut_evaluare: str
 
 
 @dataclass
@@ -47,6 +49,7 @@ class PlanDisciplina:
 _EASYOCR_READERS: dict[tuple[str, ...], easyocr.Reader] = {}
 _EASYOCR_MODEL_DIR = (Path(__file__).resolve().parent / ".easyocr_models").resolve()
 _PLAN_ROW_MARKER_RE = re.compile(r"^\d{1,2}(?:__?)?[_|]")
+_PERCENT_RE = re.compile(r"(?<!\d)(\d{1,3})\s*%")
 
 
 def remove_diacritics(text: str) -> str:
@@ -133,6 +136,57 @@ def parse_int(value: str | None) -> int | None:
     if not match:
         return None
     return int(match.group(0))
+
+
+def extract_weight_values(text: str) -> list[int]:
+    if not text:
+        return []
+    values: list[int] = []
+    for match in _PERCENT_RE.finditer(text):
+        try:
+            value = int(match.group(1))
+        except Exception:
+            continue
+        if 0 <= value <= 100:
+            values.append(value)
+    return values
+
+
+def infer_evaluation_content(block_text: str) -> str:
+    normalized = normalize_multiline_text(block_text)
+
+    section = extract_section(
+        normalized,
+        start_keywords=[
+            "10. evaluare",
+            "11. evaluare",
+            "evaluare",
+            "forma de evaluare",
+            "criterii de evaluare",
+            "ponder",
+            "ponderi",
+        ],
+        stop_keywords=[
+            "bibliografie",
+            "resurse",
+            "anexa",
+            "observatii",
+        ],
+    )
+    if section and "%" in section:
+        return section
+
+    # Fallback: capture lines that look like evaluation/weights statements.
+    lines: list[str] = []
+    for raw_line in normalized.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        lower = line.lower()
+        if "%" in lower or "ponder" in lower or "evaluare" in lower:
+            lines.append(line)
+
+    return "\n".join(lines).strip()
 
 
 def parse_semestru_token(raw_value: str) -> int | None:
@@ -446,6 +500,10 @@ def parse_fisa(text: str) -> FisaData:
 
     evaluare = normalize_evaluare(evaluare_raw) or "neprecizat"
     evaluare_cod = evaluare_to_code(evaluare)
+    continut_evaluare = infer_evaluation_content(normalized)
+    ponderi = extract_weight_values(continut_evaluare)
+    if not ponderi:
+        ponderi = extract_weight_values(normalized)
     ore_saptamana = parse_int(ore_saptamana_raw) or None
     total_ore_plan = parse_int(total_ore_raw) or None
 
@@ -456,10 +514,12 @@ def parse_fisa(text: str) -> FisaData:
         credite=parse_int(credite_raw) or -1,
         evaluare=evaluare,
         evaluare_cod=evaluare_cod,
+        ponderi=ponderi,
         ore_saptamana=ore_saptamana,
         total_ore_plan=total_ore_plan,
         continut_descriere=descriere_norm,
         continut_curs=curs_norm,
+        continut_evaluare=continut_evaluare,
     )
 
 
@@ -798,6 +858,7 @@ def initialize_db(db_path: Path) -> None:
                 semestru INTEGER NOT NULL CHECK (semestru IN (1, 2)),
                 credite INTEGER NOT NULL CHECK (credite > 0)
                 ,evaluare_format TEXT
+                ,ponderi_json TEXT
                 ,ore_saptamana INTEGER
                 ,total_ore_plan INTEGER
             )
@@ -813,6 +874,17 @@ def initialize_db(db_path: Path) -> None:
             )
             """
         )
+
+        # Backward compatibility for DBs created before new columns existed.
+        fisa_cols = {str(row[1]) for row in conn.execute("PRAGMA table_info('fisa_discipline')").fetchall()}
+        if "evaluare_format" not in fisa_cols:
+            conn.execute("ALTER TABLE fisa_discipline ADD COLUMN evaluare_format TEXT")
+        if "ponderi_json" not in fisa_cols:
+            conn.execute("ALTER TABLE fisa_discipline ADD COLUMN ponderi_json TEXT")
+        if "ore_saptamana" not in fisa_cols:
+            conn.execute("ALTER TABLE fisa_discipline ADD COLUMN ore_saptamana INTEGER")
+        if "total_ore_plan" not in fisa_cols:
+            conn.execute("ALTER TABLE fisa_discipline ADD COLUMN total_ore_plan INTEGER")
 
 
 def store_data(
@@ -838,8 +910,17 @@ def store_data(
         for fisa in fise_items:
             cursor = conn.execute(
                 """
-                    INSERT INTO fisa_discipline (cod, nume, semestru, credite, evaluare_format, ore_saptamana, total_ore_plan)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO fisa_discipline (
+                        cod,
+                        nume,
+                        semestru,
+                        credite,
+                        evaluare_format,
+                        ponderi_json,
+                        ore_saptamana,
+                        total_ore_plan
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         fisa.cod,
@@ -847,6 +928,7 @@ def store_data(
                         fisa.semestru,
                         fisa.credite,
                         fisa.evaluare_cod,
+                        json.dumps(fisa.ponderi, ensure_ascii=False),
                         fisa.ore_saptamana,
                         fisa.total_ore_plan,
                     ),
@@ -861,6 +943,13 @@ def store_data(
                 [
                     (fisa_id, "descriere", fisa.continut_descriere),
                     (fisa_id, "curs", fisa.continut_curs),
+                    (
+                        fisa_id,
+                        "evaluare",
+                        fisa.continut_evaluare
+                        if fisa.continut_evaluare
+                        else (f"Ponderi extrase: {', '.join(str(x) for x in fisa.ponderi)}" if fisa.ponderi else ""),
+                    ),
                 ],
             )
         conn.commit()
@@ -909,6 +998,7 @@ def run_pipeline(
                 "semestru": fisa.semestru,
                 "credite": fisa.credite,
                 "evaluare": fisa.evaluare,
+                "ponderi": fisa.ponderi,
             }
             for fisa_id, fisa in zip(fisa_ids[:10], fise_items[:10], strict=False)
         ],

@@ -30,6 +30,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
             semestru INTEGER NOT NULL CHECK (semestru IN (1, 2)),
             credite INTEGER NOT NULL CHECK (credite > 0),
             evaluare_format TEXT,
+            ponderi_json TEXT,
             ore_saptamana INTEGER,
             total_ore_plan INTEGER
         )
@@ -45,6 +46,17 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         )
         """
     )
+
+    # Backward compatibility for DBs created before new columns existed.
+    fisa_cols = {str(row[1]) for row in conn.execute("PRAGMA table_info('fisa_discipline')").fetchall()}
+    if "evaluare_format" not in fisa_cols:
+        conn.execute("ALTER TABLE fisa_discipline ADD COLUMN evaluare_format TEXT")
+    if "ponderi_json" not in fisa_cols:
+        conn.execute("ALTER TABLE fisa_discipline ADD COLUMN ponderi_json TEXT")
+    if "ore_saptamana" not in fisa_cols:
+        conn.execute("ALTER TABLE fisa_discipline ADD COLUMN ore_saptamana INTEGER")
+    if "total_ore_plan" not in fisa_cols:
+        conn.execute("ALTER TABLE fisa_discipline ADD COLUMN total_ore_plan INTEGER")
 
 
 def clear_data(conn: sqlite3.Connection) -> None:
@@ -107,26 +119,26 @@ def populate(conn: sqlite3.Connection) -> dict:
     ]
 
     fise = [
-        # cod, nume, semestru, credite, evaluare_format, ore_saptamana, total_ore_plan
-        ("MAT101", "Analiza Matematica", 1, 5, "E", 4, 56),
-        ("CS101", "Fundamentele algebrice ale informaticii", 1, 6, "C", 3, 42),
-        ("FIZ201", "Algoritmi fundamentali", 2, 4, "E", 2, 28),
-        ("PRJ301", "Fundamentele programarii", 2, 3, "V", 1, 14),
-        ("SDD512", "Structuri de date", 1, 2, "C", 1, 14),
-        ("SDO215", "Sisteme de operare", 1, 2, "E", 2, 28),
-        ("ENG105", "Engleza", 1, 2, "V", 1, 14),
-        ("POO201", "Programare Orientata pe Obiecte", 1, 6, "E", 4, 56),
-        ("BD202", "Baze de Date", 2, 6, "E", 4, 56),
-        ("LFA203", "Limbaje Formale si Automate", 2, 5, "E", 3, 42),
-        ("AC204", "Arhitectura Calculatoarelor", 1, 5, "C", 3, 42),
-        ("RC301", "Retele de Calculatoare", 1, 5, "E", 3, 42),
-        ("TW302", "Tehnologii Web", 2, 4, "C", 3, 42),
-        ("IA303", "Inteligenta Artificiala", 1, 6, "E", 4, 56),
-        ("IP304", "Ingineria Programarii", 2, 5, "E", 4, 56),
-        ("GC401", "Grafica pe Calculator", 1, 4, "C", 3, 42),
-        ("SEC402", "Securitatea Sistemelor Informatice", 2, 5, "E", 3, 42),
-        ("OPT403", "Dezvoltarea Aplicatiilor Mobile (Optional)", 2, 4, "V", 3, 42),
-        ("PRJ404", "Proiect de Licenta", 2, 10, "C", 4, 56),
+        # cod, nume, semestru, credite, evaluare_format, ponderi_json, ore_saptamana, total_ore_plan
+        ("MAT101", "Analiza Matematica", 1, 5, "E", "[60, 40]", 4, 56),
+        ("CS101", "Fundamentele algebrice ale informaticii", 1, 6, "C", "[50, 50]", 3, 42),
+        ("FIZ201", "Algoritmi fundamentali", 2, 4, "E", "[70, 30]", 2, 28),
+        ("PRJ301", "Fundamentele programarii", 2, 3, "V", "[100]", 1, 14),
+        ("SDD512", "Structuri de date", 1, 2, "C", "[50, 50]", 1, 14),
+        ("SDO215", "Sisteme de operare", 1, 2, "E", "[60, 40]", 2, 28),
+        ("ENG105", "Engleza", 1, 2, "V", "[100]", 1, 14),
+        ("POO201", "Programare Orientata pe Obiecte", 1, 6, "E", "[60, 40]", 4, 56),
+        ("BD202", "Baze de Date", 2, 6, "E", "[70, 30]", 4, 56),
+        ("LFA203", "Limbaje Formale si Automate", 2, 5, "E", "[60, 40]", 3, 42),
+        ("AC204", "Arhitectura Calculatoarelor", 1, 5, "C", "[50, 50]", 3, 42),
+        ("RC301", "Retele de Calculatoare", 1, 5, "E", "[60, 40]", 3, 42),
+        ("TW302", "Tehnologii Web", 2, 4, "C", "[50, 50]", 3, 42),
+        ("IA303", "Inteligenta Artificiala", 1, 6, "E", "[60, 40]", 4, 56),
+        ("IP304", "Ingineria Programarii", 2, 5, "E", "[70, 30]", 4, 56),
+        ("GC401", "Grafica pe Calculator", 1, 4, "C", "[50, 50]", 3, 42),
+        ("SEC402", "Securitatea Sistemelor Informatice", 2, 5, "E", "[60, 40]", 3, 42),
+        ("OPT403", "Dezvoltarea Aplicatiilor Mobile (Optional)", 2, 4, "V", "[100]", 3, 42),
+        ("PRJ404", "Proiect de Licenta", 2, 10, "C", "[50, 50]", 4, 56),
     ]
 
     cur = conn.cursor()
@@ -138,7 +150,7 @@ def populate(conn: sqlite3.Connection) -> dict:
     fisa_ids = []
     for item in fise:
         cur.execute(
-            "INSERT INTO fisa_discipline (cod, nume, semestru, credite, evaluare_format, ore_saptamana, total_ore_plan) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO fisa_discipline (cod, nume, semestru, credite, evaluare_format, ponderi_json, ore_saptamana, total_ore_plan) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             item,
         )
         fisa_ids.append(cur.lastrowid)
@@ -150,6 +162,8 @@ def populate(conn: sqlite3.Connection) -> dict:
         sections.append((fid, "descriere", f"Descriere pentru {cod}."))
         sections.append((fid, "curs", f"Tematica curs pentru {cod} (sintetica)."))
         sections.append((fid, "laborator", f"Exercitii si laborator pentru {cod}.") )
+        ponderi_text = (f[5] or "[]").replace("[", "").replace("]", "")
+        sections.append((fid, "evaluare", f"Ponderi evaluare pentru {cod}: {ponderi_text.replace(',', '% +').strip()}%." if ponderi_text else f"Ponderi evaluare pentru {cod}: 100%."))
         if f[3] >= 3:
             sections.append((fid, "proiect", f"Proiect/tema pentru {cod}."))
 
@@ -175,7 +189,7 @@ def inspect(conn: sqlite3.Connection) -> dict:
             counts[t] = cur.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
         except Exception:
             counts[t] = None
-    sample = [list(r) for r in cur.execute("SELECT id, cod, nume, semestru, credite, evaluare_format, ore_saptamana, total_ore_plan FROM fisa_discipline LIMIT 5").fetchall()]
+    sample = [list(r) for r in cur.execute("SELECT id, cod, nume, semestru, credite, evaluare_format, ponderi_json, ore_saptamana, total_ore_plan FROM fisa_discipline LIMIT 5").fetchall()]
     return {"tables": tables, "counts": counts, "sample_fisa": sample}
 
 
