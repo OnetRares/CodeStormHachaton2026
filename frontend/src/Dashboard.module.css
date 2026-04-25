@@ -613,6 +613,10 @@
     grid-template-columns: 1fr;
   }
 
+  .fdIssuesGrid {
+    grid-template-columns: 1fr;
+  }
+
   .detailGrid {
     grid-template-columns: 1fr;
   }
@@ -701,6 +705,7 @@
 .navGroup {
   display: flex;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .navButton {
@@ -983,4 +988,86 @@
   margin-top: 0.3rem;
   font-size: 0.78rem;
   color: #475569;
+}
+
+.fdSingleUploadWrap {
+  margin-top: 1.1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.fdSingleUploadWrap .uploadCard {
+  width: min(100%, 520px);
+}
+
+.fdResultPanel {
+  margin: 1.1rem auto 0;
+  max-width: 1080px;
+  border: 1px solid #d6e2ef;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 1rem;
+}
+
+.fdResultStatus {
+  margin-top: 0.35rem;
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.fdResultStatusOk {
+  background: #ecfdf5;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.fdResultStatusBad {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.fdIssuesGrid {
+  margin-top: 0.85rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.fdIssueCard {
+  border: 1px solid #d6e2ef;
+  border-radius: 12px;
+  background: #f9fcff;
+  padding: 0.8rem;
+}
+
+.fdIssueCard h3 {
+  font-family: var(--font-display);
+  font-size: 0.96rem;
+  color: #0f172a;
+  margin-bottom: 0.45rem;
+}
+
+.fdIssueCard p {
+  font-size: 0.84rem;
+  color: #334155;
+}
+
+.fdIssueOk {
+  border-left: 4px solid #16a34a;
+}
+
+.fdIssueBad {
+  border-left: 4px solid #dc2626;
+}
+
+.fdIssueList {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.34rem;
+  font-size: 0.84rem;
+  color: #1e293b;
 }

@@ -6,6 +6,7 @@ import {
   fetchCompetencySubjects,
   fetchWeightsHoursCheck,
   fetchRecommendedCompetencies,
+  validateSingleFdPdf,
   validateFdAgainstPlanMaster,
 } from './services/compareApi';
 
@@ -265,9 +266,11 @@ export default function Dashboard({ onLogout }) {
   const [fdFileA, setFdFileA] = useState(null);
   const [fdFileB, setFdFileB] = useState(null);
   const [piFile, setPiFile] = useState(null);
-  const [viewMode, setViewMode] = useState('upload'); // 'upload', 'results', 'batch', 'quality'
+  const [fdSingleFile, setFdSingleFile] = useState(null);
+  const [viewMode, setViewMode] = useState('upload'); // 'upload', 'results', 'batch', 'quality', 'fdsingle'
   const [comparisonResult, setComparisonResult] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
+  const [singleFdValidationResult, setSingleFdValidationResult] = useState(null);
   const [resultTab, setResultTab] = useState('visual');
   const [loading, setLoading] = useState(false);
   const [activeAction, setActiveAction] = useState(null);
@@ -291,6 +294,7 @@ export default function Dashboard({ onLogout }) {
   const fdAInputRef = useRef(null);
   const fdBInputRef = useRef(null);
   const piInputRef = useRef(null);
+  const fdSingleInputRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -322,6 +326,10 @@ export default function Dashboard({ onLogout }) {
     if (type === 'fdA') setFdFileA(file);
     if (type === 'fdB') setFdFileB(file);
     if (type === 'pi') setPiFile(file);
+    if (type === 'fdSingle') {
+      setFdSingleFile(file);
+      setSingleFdValidationResult(null);
+    }
   };
 
   const handleStartAnalysis = async () => {
@@ -412,6 +420,28 @@ export default function Dashboard({ onLogout }) {
     }
   };
 
+  const handleRunSingleFdValidation = async () => {
+    if (!fdSingleFile) {
+      setError('Selecteaza un PDF pentru validare.');
+      return;
+    }
+
+    setLoading(true);
+    setActiveAction('fd-single');
+    setError('');
+    setSingleFdValidationResult(null);
+
+    try {
+      const response = await validateSingleFdPdf(fdSingleFile);
+      setSingleFdValidationResult(response);
+    } catch (err) {
+      setError(err.message || 'Validarea fisei a esuat.');
+    } finally {
+      setLoading(false);
+      setActiveAction(null);
+    }
+  };
+
   const changes = comparisonResult?.changes || [];
   const globalLeftTokenSet = new Set(
     changes
@@ -437,6 +467,14 @@ export default function Dashboard({ onLogout }) {
     if (weightsHoursFilter === 'not_ok') return row?.overall_status !== 'ok';
     return true;
   });
+  const fdSingleMissing = Array.isArray(singleFdValidationResult?.missing_fields)
+    ? singleFdValidationResult.missing_fields
+    : [];
+  const fdSingleMathErrors =
+    singleFdValidationResult?.math_errors && typeof singleFdValidationResult.math_errors === 'object'
+      ? Object.entries(singleFdValidationResult.math_errors)
+      : [];
+  const fdSingleCanonical = singleFdValidationResult?.fisa_canonical || null;
   const resultTitle = resultTab === 'validation' ? 'FD vs Plan Master Differences' : 'Side-by-Side Visual Comparison';
 
   const handleShowSubjectCompetencies = async () => {
@@ -487,6 +525,12 @@ export default function Dashboard({ onLogout }) {
             onClick={() => setViewMode('quality')}
           >
             Weights & Hours
+          </button>
+          <button
+            className={`${styles.navButton} ${viewMode === 'fdsingle' ? styles.activeNav : ''}`}
+            onClick={() => setViewMode('fdsingle')}
+          >
+            FD Validator
           </button>
         </div>
         <button className={styles.logoutButton} onClick={onLogout}>
@@ -728,6 +772,92 @@ export default function Dashboard({ onLogout }) {
                     })}
                   </div>
                 )}
+              </section>
+            ) : null}
+          </section>
+        ) : viewMode === 'fdsingle' ? (
+          <section className={styles.uploadSection}>
+            <h1 className={styles.sectionTitle}>Single FD Validator</h1>
+            <p className={styles.infoText}>
+              Incarca un singur PDF de fisa disciplina (text PDF, fara OCR) si vezi instant
+              daca exista campuri lipsa sau erori matematice.
+            </p>
+
+            {error && <div className={styles.errorBox}>{error}</div>}
+
+            <div className={styles.fdSingleUploadWrap}>
+              <div
+                className={`${styles.uploadCard} ${fdSingleFile ? styles.fileSelected : ''}`}
+                onClick={() => fdSingleInputRef.current?.click()}
+              >
+                <div className={styles.uploadIcon}>{fdSingleFile ? <CheckCircleIcon /> : <UploadIcon />}</div>
+                <h3>FD PDF</h3>
+                <p>{fdSingleFile ? fdSingleFile.name : 'Upload fisa disciplinei'}</p>
+                <input
+                  ref={fdSingleInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  className={styles.hiddenInput}
+                  onChange={(event) => handleFileChange(event, 'fdSingle')}
+                />
+              </div>
+            </div>
+
+            <div className={styles.buttonRow}>
+              <button
+                className={styles.analyzeButton}
+                onClick={handleRunSingleFdValidation}
+                disabled={!fdSingleFile || loading}
+              >
+                {loading && activeAction === 'fd-single' ? 'Se valideaza...' : 'Valideaza fisa'}
+              </button>
+            </div>
+
+            {singleFdValidationResult ? (
+              <section className={styles.fdResultPanel}>
+                <div className={styles.metricGrid}>
+                  <MetricCard label="Status" value={singleFdValidationResult.valid ? 'VALID' : 'INVALID'} />
+                  <MetricCard label="Missing Fields" value={fdSingleMissing.length} />
+                  <MetricCard label="Math Errors" value={fdSingleMathErrors.length} />
+                  <MetricCard label="Disciplina" value={fdSingleCanonical?.nume_disciplina || '-'} />
+                  <MetricCard label="Semestru" value={fdSingleCanonical?.semestru ?? '-'} />
+                </div>
+
+                <div className={`${styles.fdResultStatus} ${singleFdValidationResult.valid ? styles.fdResultStatusOk : styles.fdResultStatusBad}`}>
+                  {singleFdValidationResult.valid
+                    ? 'Validare trecuta: nu exista missing fields sau math errors.'
+                    : 'Validare esuata: verifica detaliile de mai jos.'}
+                </div>
+
+                <div className={styles.fdIssuesGrid}>
+                  <article className={`${styles.fdIssueCard} ${fdSingleMissing.length === 0 ? styles.fdIssueOk : styles.fdIssueBad}`}>
+                    <h3>Missing Fields</h3>
+                    {fdSingleMissing.length === 0 ? (
+                      <p>Nu exista campuri lipsa.</p>
+                    ) : (
+                      <ul className={styles.fdIssueList}>
+                        {fdSingleMissing.map((field) => (
+                          <li key={field}>{field}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </article>
+
+                  <article className={`${styles.fdIssueCard} ${fdSingleMathErrors.length === 0 ? styles.fdIssueOk : styles.fdIssueBad}`}>
+                    <h3>Math Errors</h3>
+                    {fdSingleMathErrors.length === 0 ? (
+                      <p>Nu exista erori matematice.</p>
+                    ) : (
+                      <ul className={styles.fdIssueList}>
+                        {fdSingleMathErrors.map(([key, value]) => (
+                          <li key={key}>
+                            <strong>{key}</strong>: {String(value)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </article>
+                </div>
               </section>
             ) : null}
           </section>

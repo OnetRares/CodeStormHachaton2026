@@ -88,6 +88,23 @@ export async function validateFdAgainstPlanMaster(fisaPdf, planPdf, options = {}
   return payload;
 }
 
+export async function validateSingleFdPdf(fisaPdf) {
+  const formData = new FormData();
+  formData.append('fisa_pdf', fisaPdf);
+
+  const response = await fetch(`${API_BASE_URL}/validate/fd-single`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(normalizeValidationErrorPayload(payload));
+  }
+
+  return payload;
+}
+
 export async function fetchCompetencySubjects() {
   const response = await fetch(`${API_BASE_URL}/competencies/subjects`);
   const payload = await response.json().catch(() => null);

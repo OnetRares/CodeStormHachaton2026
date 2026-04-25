@@ -72,6 +72,18 @@ try:
 except ImportError:
     check_weights_hours_db = None
 
+try:
+    from validator_fd import load_fd_from_input, run_validation
+    FD_VALIDATOR_IMPORT_ERROR = None
+except ModuleNotFoundError:
+    try:
+        from backend.validator_fd import load_fd_from_input, run_validation
+        FD_VALIDATOR_IMPORT_ERROR = None
+    except ModuleNotFoundError as exc:
+        load_fd_from_input = None
+        run_validation = None
+        FD_VALIDATOR_IMPORT_ERROR = exc
+
 app = FastAPI(title="PDF Ingestion & Validation Service", version="2.0.0")
 BASE_DIR = Path(__file__).resolve().parent
 COMPARE_OUTPUT_DIR = BASE_DIR / "compare_output"
@@ -189,6 +201,21 @@ def _ensure_visual_compare_dependencies() -> None:
             "message": "missing_backend_dependency",
             "error": str(PDF_COMPARE_IMPORT_ERROR),
             "hint": "Install backend requirements to use visual compare endpoint.",
+        },
+    )
+
+
+def _ensure_fd_validator_dependencies() -> None:
+    if FD_VALIDATOR_IMPORT_ERROR is None:
+        return
+
+    raise HTTPException(
+        status_code=500,
+        detail={
+            "status": "error",
+            "message": "missing_backend_dependency",
+            "error": str(FD_VALIDATOR_IMPORT_ERROR),
+            "hint": "Install backend requirements to use single FD validator endpoint.",
         },
     )
 
@@ -476,6 +503,45 @@ async def validate(
                 detail={
                     "status": "error",
                     "message": "Eroare la procesarea PDF-urilor.",
+                    "error": str(exc),
+                },
+            ) from exc
+
+
+def _validate_single_fd_blocking(fisa_tmp: Path) -> dict:
+    canonical = load_fd_from_input(
+        input_path=fisa_tmp,
+        scanned=False,
+        ocr_lang="ro,en",
+    )
+    result = run_validation(canonical)
+    return {
+        "status": "success",
+        **result,
+    }
+
+
+@app.post("/validate/fd-single")
+async def validate_fd_single(
+    fisa_pdf: UploadFile = File(..., description="PDF cu o singura Fisa de Disciplina"),
+) -> dict:
+    _ensure_fd_validator_dependencies()
+
+    with save_upload_to_temp_path(fisa_pdf) as fisa_tmp:
+        try:
+            result = await run_in_threadpool(
+                _validate_single_fd_blocking,
+                fisa_tmp=fisa_tmp,
+            )
+            return result
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "status": "error",
+                    "message": "single_fd_validation_failed",
                     "error": str(exc),
                 },
             ) from exc
