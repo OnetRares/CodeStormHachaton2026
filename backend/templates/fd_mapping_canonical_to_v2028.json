@@ -1,0 +1,62 @@
+{
+  "mapping_id": "fd_canonical_to_v2028",
+  "template_version": "fd_template_v2028",
+  "mappings": [
+    { "target": "program.institutie", "source": "required_fields:1.1", "required": true },
+    { "target": "program.facultate", "source": "required_fields:1.2", "required": true },
+    { "target": "program.departament", "source": "required_fields:1.3", "required": true },
+    { "target": "program.domeniu_studii", "source": "required_fields:1.4", "required": true },
+    { "target": "program.ciclu_studii", "source": "required_fields:1.5", "required": true },
+    { "target": "program.program_si_calificare", "source": "required_fields:1.6", "required": true },
+
+    { "target": "disciplina.cod", "source": "probe.cod", "required": false, "default": "" },
+    { "target": "disciplina.denumire", "source": "core.nume_disciplina", "required": true },
+    { "target": "disciplina.titular_curs", "source": "required_fields:2.2", "required": false },
+    { "target": "disciplina.titular_seminar_laborator_proiect", "source": "required_fields:2.3", "required": false },
+    { "target": "disciplina.an_studiu", "source": "required_fields:2.4", "required": false },
+    { "target": "disciplina.semestru", "source": "core.semestru", "required": true },
+    { "target": "disciplina.tip_evaluare", "source": "core.evaluare.tip", "required": false },
+    { "target": "disciplina.regim", "source": "required_fields:2.7", "required": false },
+    { "target": "disciplina.credite", "source": "core.credite", "required": true },
+
+    { "target": "timp.ore_pe_saptamana", "source": "required_fields:3.1", "required": false },
+    { "target": "timp.ore_curs_saptamana", "source": "required_fields:3.2", "required": false },
+    { "target": "timp.ore_seminar_laborator_saptamana", "source": "required_fields:3.3", "required": false },
+    { "target": "timp.ore_totale_plan", "source": "core.ore.total_plan", "required": false },
+    { "target": "timp.ore_curs_total", "source": "core.ore.curs", "required": false },
+    { "target": "timp.ore_seminar_laborator_total", "source": "core.ore.laborator", "required": false },
+    { "target": "timp.ore_activitate_student", "source": "required_fields:3.7", "required": false },
+    { "target": "timp.ore_totale_semestru", "source": "required_fields:3.8", "required": false },
+
+    { "target": "timp.distributie.studiu_dupa_manual", "source": "distribution_hours:3.df.studiu_dupa_manual", "required": false },
+    { "target": "timp.distributie.documentare_suplimentara", "source": "distribution_hours:3.df.documentare_suplimentara", "required": false },
+    { "target": "timp.distributie.pregatire_seminare", "source": "distribution_hours:3.df.pregatire_seminare", "required": false },
+    { "target": "timp.distributie.tutoriat", "source": "distribution_hours:3.df.tutoriat", "required": false },
+    { "target": "timp.distributie.examinari", "source": "distribution_hours:3.df.examinari", "required": false },
+    { "target": "timp.distributie.alte_activitati", "source": "distribution_hours:3.df.alte_activitati", "required": false },
+
+    { "target": "preconditii.curriculum", "source": "required_fields:4.1", "required": false },
+    { "target": "preconditii.competente", "source": "required_fields:4.2", "required": false },
+
+    { "target": "conditii.desfasurare_curs", "source": "required_fields:5.1", "required": false },
+    { "target": "conditii.desfasurare_seminar_laborator_proiect", "source": "required_fields:5.2", "required": false },
+
+    { "target": "competente.specifice", "source": "required_fields:6", "required": false, "default": "" },
+    { "target": "competente.sectiune_6_prezenta", "source": "required_sections:6", "required": false, "default": false },
+
+    { "target": "obiective.general", "source": "required_fields:7.1", "required": false },
+    { "target": "obiective.specifice", "source": "required_fields:7.2", "required": false },
+
+    { "target": "continut.curs", "source": "required_fields:8.1", "required": false },
+    { "target": "continut.seminar_laborator_proiect", "source": "required_fields:8.2", "required": false },
+    { "target": "continut.coroborare_continuturi", "source": "required_fields:9", "required": false, "default": "" },
+    { "target": "continut.sectiune_9_prezenta", "source": "required_sections:9", "required": false, "default": false },
+
+    { "target": "evaluare.tip", "source": "core.evaluare.tip", "required": false },
+    { "target": "evaluare.ponderi_curs_laborator", "source": "core.evaluare.ponderi_curs_laborator", "required": false, "default": [] },
+    { "target": "evaluare.descriere_curs", "source": "required_fields:10.4", "required": false },
+    { "target": "evaluare.descriere_seminar_laborator_proiect", "source": "required_fields:10.5", "required": false },
+    { "target": "evaluare.standard_minim_performanta", "source": "required_fields:10.6", "required": false },
+    { "target": "evaluare.sectiune_10_prezenta", "source": "required_sections:10", "required": false, "default": false }
+  ]
+}

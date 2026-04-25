@@ -126,6 +126,29 @@ export async function prefillSingleFdTemplateFromPi(fisaPdf) {
   };
 }
 
+export async function migrateFdToTemplate(fisaPdf) {
+  const formData = new FormData();
+  formData.append('fisa_pdf', fisaPdf);
+
+  const response = await fetch(`${API_BASE_URL}/migrate/fd-template`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(normalizeValidationErrorPayload(payload));
+  }
+
+  return {
+    ...payload,
+    output_template_url: toAbsoluteUrl(payload?.output_template_url),
+    output_canonical_url: toAbsoluteUrl(payload?.output_canonical_url),
+    output_report_url: toAbsoluteUrl(payload?.output_report_url),
+    output_docx_url: toAbsoluteUrl(payload?.output_docx_url),
+  };
+}
+
 export async function fetchCompetencySubjects() {
   const response = await fetch(`${API_BASE_URL}/competencies/subjects`);
   const payload = await response.json().catch(() => null);

@@ -1115,3 +1115,49 @@
   font-size: 0.84rem;
   color: #1e293b;
 }
+
+.subtleLinkRow {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.textLink {
+  color: #0369a1;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.textLink:hover {
+  text-decoration: underline;
+}
+
+.jsonPreview {
+  margin-top: 0.85rem;
+  border: 1px solid #d6e2ef;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 0.8rem;
+}
+
+.jsonPreview h3 {
+  font-family: var(--font-display);
+  font-size: 0.96rem;
+  color: #0f172a;
+  margin-bottom: 0.45rem;
+}
+
+.jsonCode {
+  margin: 0;
+  border: 1px solid #d6e2ef;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 0.7rem;
+  max-height: 420px;
+  overflow: auto;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}

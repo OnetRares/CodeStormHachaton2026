@@ -6,6 +6,7 @@ import {
   fetchCompetencySubjects,
   fetchWeightsHoursCheck,
   fetchRecommendedCompetencies,
+  migrateFdToTemplate,
   prefillSingleFdTemplateFromPi,
   validateSingleFdPdf,
   validateFdAgainstPlanMaster,
@@ -269,11 +270,13 @@ export default function Dashboard({ onLogout }) {
   const [piFile, setPiFile] = useState(null);
   const [fdSingleFile, setFdSingleFile] = useState(null);
   const [fdPrefillFile, setFdPrefillFile] = useState(null);
-  const [viewMode, setViewMode] = useState('upload'); // 'upload', 'results', 'batch', 'quality', 'fdsingle', 'fdprefill'
+  const [fdMigrationFile, setFdMigrationFile] = useState(null);
+  const [viewMode, setViewMode] = useState('upload'); // 'upload', 'results', 'batch', 'quality', 'fdsingle', 'fdprefill', 'fdmigrate'
   const [comparisonResult, setComparisonResult] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
   const [singleFdValidationResult, setSingleFdValidationResult] = useState(null);
   const [singleFdPrefillResult, setSingleFdPrefillResult] = useState(null);
+  const [singleFdMigrationResult, setSingleFdMigrationResult] = useState(null);
   const [resultTab, setResultTab] = useState('visual');
   const [loading, setLoading] = useState(false);
   const [activeAction, setActiveAction] = useState(null);
@@ -299,6 +302,7 @@ export default function Dashboard({ onLogout }) {
   const piInputRef = useRef(null);
   const fdSingleInputRef = useRef(null);
   const fdPrefillInputRef = useRef(null);
+  const fdMigrationInputRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -337,6 +341,10 @@ export default function Dashboard({ onLogout }) {
     if (type === 'fdPrefill') {
       setFdPrefillFile(file);
       setSingleFdPrefillResult(null);
+    }
+    if (type === 'fdMigration') {
+      setFdMigrationFile(file);
+      setSingleFdMigrationResult(null);
     }
   };
 
@@ -472,6 +480,28 @@ export default function Dashboard({ onLogout }) {
     }
   };
 
+  const handleRunSingleFdMigration = async () => {
+    if (!fdMigrationFile) {
+      setError('Selecteaza un PDF pentru migrare.');
+      return;
+    }
+
+    setLoading(true);
+    setActiveAction('fd-migrate');
+    setError('');
+    setSingleFdMigrationResult(null);
+
+    try {
+      const response = await migrateFdToTemplate(fdMigrationFile);
+      setSingleFdMigrationResult(response);
+    } catch (err) {
+      setError(err.message || 'Migrarea catre noul template a esuat.');
+    } finally {
+      setLoading(false);
+      setActiveAction(null);
+    }
+  };
+
   const changes = comparisonResult?.changes || [];
   const globalLeftTokenSet = new Set(
     changes
@@ -506,6 +536,12 @@ export default function Dashboard({ onLogout }) {
       : [];
   const fdSingleCanonical = singleFdValidationResult?.fisa_canonical || null;
   const fdPrefillMatchedDiscipline = singleFdPrefillResult?.matched_discipline || '-';
+  const fdMigrationMatchedDiscipline = singleFdMigrationResult?.disciplina || '-';
+  const fdMigrationMissingRequired = Array.isArray(singleFdMigrationResult?.required_fields_missing)
+    ? singleFdMigrationResult.required_fields_missing
+    : [];
+  const fdMigrationCoveragePercent = Number(singleFdMigrationResult?.coverage_required ?? 0) * 100;
+  const fdMigrationTemplatePreview = singleFdMigrationResult?.template_preview || null;
   const resultTitle = resultTab === 'validation' ? 'FD vs Plan Master Differences' : 'Side-by-Side Visual Comparison';
 
   const handleShowSubjectCompetencies = async () => {
@@ -568,6 +604,12 @@ export default function Dashboard({ onLogout }) {
             onClick={() => setViewMode('fdprefill')}
           >
             FD Prefill
+          </button>
+          <button
+            className={`${styles.navButton} ${viewMode === 'fdmigrate' ? styles.activeNav : ''}`}
+            onClick={() => setViewMode('fdmigrate')}
+          >
+            FD Migrare
           </button>
         </div>
         <button className={styles.logoutButton} onClick={onLogout}>
@@ -969,6 +1011,127 @@ export default function Dashboard({ onLogout }) {
                       </a>
                     ) : null}
                   </div>
+                ) : null}
+              </section>
+            ) : null}
+          </section>
+        ) : viewMode === 'fdmigrate' ? (
+          <section className={styles.uploadSection}>
+            <h1 className={styles.sectionTitle}>Migrare FD: Template Vechi -&gt; Template Nou</h1>
+            <p className={styles.infoText}>
+              Incarca fisa veche (PDF), construim modelul canonic si generam automat template-ul nou precompletat.
+            </p>
+
+            {error && <div className={styles.errorBox}>{error}</div>}
+
+            <div className={styles.fdSingleUploadWrap}>
+              <div
+                className={`${styles.uploadCard} ${fdMigrationFile ? styles.fileSelected : ''}`}
+                onClick={() => fdMigrationInputRef.current?.click()}
+              >
+                <div className={styles.uploadIcon}>{fdMigrationFile ? <CheckCircleIcon /> : <UploadIcon />}</div>
+                <h3>FD Vechi (PDF)</h3>
+                <p>{fdMigrationFile ? fdMigrationFile.name : 'Upload fisa disciplinei vechi'}</p>
+                <input
+                  ref={fdMigrationInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  className={styles.hiddenInput}
+                  onChange={(event) => handleFileChange(event, 'fdMigration')}
+                />
+              </div>
+            </div>
+
+            <div className={styles.buttonRow}>
+              <button
+                className={styles.analyzeButton}
+                onClick={handleRunSingleFdMigration}
+                disabled={!fdMigrationFile || loading}
+              >
+                {loading && activeAction === 'fd-migrate' ? 'Se migreaza...' : 'Genereaza template nou'}
+              </button>
+            </div>
+
+            {singleFdMigrationResult ? (
+              <section className={styles.fdResultPanel}>
+                <div className={styles.metricGrid}>
+                  <MetricCard label="Status" value={singleFdMigrationResult.status?.toUpperCase() || '-'} />
+                  <MetricCard label="Disciplina" value={fdMigrationMatchedDiscipline} />
+                  <MetricCard label="Coverage Required" value={`${fdMigrationCoveragePercent.toFixed(2)}%`} />
+                  <MetricCard label="Missing Required" value={fdMigrationMissingRequired.length} />
+                </div>
+
+                <div className={`${styles.fdResultStatus} ${styles.fdResultStatusOk}`}>
+                  Migrarea in noul template s-a finalizat.
+                </div>
+
+                {singleFdMigrationResult.output_template_url || singleFdMigrationResult.output_docx_url ? (
+                  <div className={styles.buttonRow}>
+                    {singleFdMigrationResult.output_template_url ? (
+                      <a
+                        className={styles.actionLinkButton}
+                        href={singleFdMigrationResult.output_template_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Deschide template-ul nou (JSON)
+                      </a>
+                    ) : null}
+                    {singleFdMigrationResult.output_docx_url ? (
+                      <a
+                        className={styles.secondaryActionLinkButton}
+                        href={singleFdMigrationResult.output_docx_url}
+                        download
+                      >
+                        Export Word (.docx)
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {singleFdMigrationResult.output_canonical_url || singleFdMigrationResult.output_report_url ? (
+                  <div className={styles.subtleLinkRow}>
+                    {singleFdMigrationResult.output_canonical_url ? (
+                      <a
+                        className={styles.textLink}
+                        href={singleFdMigrationResult.output_canonical_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Model canonic (JSON)
+                      </a>
+                    ) : null}
+                    {singleFdMigrationResult.output_report_url ? (
+                      <a
+                        className={styles.textLink}
+                        href={singleFdMigrationResult.output_report_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Raport mapare
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {fdMigrationMissingRequired.length > 0 ? (
+                  <article className={`${styles.fdIssueCard} ${styles.fdIssueBad}`}>
+                    <h3>Campuri obligatorii necompletate</h3>
+                    <ul className={styles.fdIssueList}>
+                      {fdMigrationMissingRequired.map((fieldName) => (
+                        <li key={fieldName}>{fieldName}</li>
+                      ))}
+                    </ul>
+                  </article>
+                ) : null}
+
+                {fdMigrationTemplatePreview ? (
+                  <section className={styles.jsonPreview}>
+                    <h3>Preview template nou</h3>
+                    <pre className={styles.jsonCode}>
+                      {JSON.stringify(fdMigrationTemplatePreview, null, 2)}
+                    </pre>
+                  </section>
                 ) : null}
               </section>
             ) : null}

@@ -1,0 +1,74 @@
+{
+  "template_meta": {
+    "template_id": "fd_template_v2028",
+    "source_schema": "fd_canonical_v1",
+    "generated_at": null
+  },
+  "program": {
+    "institutie": "",
+    "facultate": "",
+    "departament": "",
+    "domeniu_studii": "",
+    "ciclu_studii": "",
+    "program_si_calificare": ""
+  },
+  "disciplina": {
+    "cod": "",
+    "denumire": "",
+    "titular_curs": "",
+    "titular_seminar_laborator_proiect": "",
+    "an_studiu": "",
+    "semestru": "",
+    "tip_evaluare": "",
+    "regim": "",
+    "credite": null
+  },
+  "timp": {
+    "ore_pe_saptamana": "",
+    "ore_curs_saptamana": "",
+    "ore_seminar_laborator_saptamana": "",
+    "ore_totale_plan": "",
+    "ore_curs_total": "",
+    "ore_seminar_laborator_total": "",
+    "ore_activitate_student": "",
+    "ore_totale_semestru": "",
+    "distributie": {
+      "studiu_dupa_manual": null,
+      "documentare_suplimentara": null,
+      "pregatire_seminare": null,
+      "tutoriat": null,
+      "examinari": null,
+      "alte_activitati": null
+    }
+  },
+  "preconditii": {
+    "curriculum": "",
+    "competente": ""
+  },
+  "conditii": {
+    "desfasurare_curs": "",
+    "desfasurare_seminar_laborator_proiect": ""
+  },
+  "competente": {
+    "specifice": "",
+    "sectiune_6_prezenta": false
+  },
+  "obiective": {
+    "general": "",
+    "specifice": ""
+  },
+  "continut": {
+    "curs": "",
+    "seminar_laborator_proiect": "",
+    "coroborare_continuturi": "",
+    "sectiune_9_prezenta": false
+  },
+  "evaluare": {
+    "tip": "",
+    "ponderi_curs_laborator": [],
+    "descriere_curs": "",
+    "descriere_seminar_laborator_proiect": "",
+    "standard_minim_performanta": "",
+    "sectiune_10_prezenta": false
+  }
+}

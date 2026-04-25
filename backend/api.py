@@ -127,10 +127,23 @@ except ModuleNotFoundError:
         parse_fd_probe = None
         FD_SINGLE_PREFILL_IMPORT_ERROR = exc
 
+try:
+    from fd_migration_service import migrate_fd_pdf_to_template
+    FD_MIGRATION_IMPORT_ERROR = None
+except ModuleNotFoundError:
+    try:
+        from backend.fd_migration_service import migrate_fd_pdf_to_template
+        FD_MIGRATION_IMPORT_ERROR = None
+    except ModuleNotFoundError as exc:
+        migrate_fd_pdf_to_template = None
+        FD_MIGRATION_IMPORT_ERROR = exc
+
 app = FastAPI(title="PDF Ingestion & Validation Service", version="2.0.0")
 BASE_DIR = Path(__file__).resolve().parent
 COMPARE_OUTPUT_DIR = BASE_DIR / "compare_output"
 USERS_DB_PATH = BASE_DIR / "data" / "users.db"
+FD_MIGRATION_TEMPLATE_PATH = BASE_DIR / "templates" / "fd_template_v2028.json"
+FD_MIGRATION_MAPPING_PATH = BASE_DIR / "templates" / "fd_mapping_canonical_to_v2028.json"
 
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]{3,50}$")
@@ -200,7 +213,8 @@ def save_upload_to_temp_path(upload: UploadFile) -> Generator[Path, None, None]:
         yield temp_path
     finally:
         if temp_path and temp_path.exists():
-            os.unlink(temp_path)
+            with contextlib.suppress(PermissionError, FileNotFoundError):
+                os.unlink(temp_path)
 
 
 def _get_comparable_name(text: str) -> str:
@@ -292,6 +306,22 @@ def _ensure_fd_single_prefill_dependencies() -> None:
             "message": "missing_backend_dependency",
             "error": str(missing_dependency_error),
             "hint": "Install backend requirements to use single FD prefill + Word export endpoint.",
+        },
+    )
+
+
+def _ensure_fd_migration_dependencies() -> None:
+    missing_dependency_error = FD_MIGRATION_IMPORT_ERROR or WORD_EXPORT_IMPORT_ERROR
+    if missing_dependency_error is None:
+        return
+
+    raise HTTPException(
+        status_code=500,
+        detail={
+            "status": "error",
+            "message": "missing_backend_dependency",
+            "error": str(missing_dependency_error),
+            "hint": "Install backend requirements to use FD template migration endpoint.",
         },
     )
 
@@ -517,6 +547,129 @@ def _build_single_fd_docx(plan_row, debug_source: str, output_docx_path: Path) -
 
     output_docx_path.parent.mkdir(parents=True, exist_ok=True)
     document.save(output_docx_path)
+
+
+def _flatten_template_for_docx(value, prefix: str = "") -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    if isinstance(value, dict):
+        for key, nested_value in value.items():
+            nested_prefix = f"{prefix}.{key}" if prefix else str(key)
+            rows.extend(_flatten_template_for_docx(nested_value, nested_prefix))
+        return rows
+
+    if isinstance(value, list):
+        rows.append((prefix, json.dumps(value, ensure_ascii=False)))
+        return rows
+
+    if value is None:
+        rows.append((prefix, ""))
+        return rows
+
+    rows.append((prefix, str(value)))
+    return rows
+
+
+def _build_migrated_template_docx(
+    migrated_template: dict,
+    report_payload: dict,
+    output_docx_path: Path,
+) -> None:
+    document = Document()
+    disciplina_payload = migrated_template.get("disciplina", {})
+    disciplina_name = "-"
+    if isinstance(disciplina_payload, dict):
+        disciplina_name = str(disciplina_payload.get("denumire") or "-")
+
+    document.add_heading("Fisa Disciplinei - Template Migrat", level=1)
+    document.add_paragraph(f"Disciplina: {disciplina_name}")
+    document.add_paragraph(
+        f"Acoperire campuri obligatorii: {round(float(report_payload.get('coverage_required', 0.0)) * 100, 2)}%"
+    )
+
+    missing_required = report_payload.get("required_fields_missing", [])
+    if isinstance(missing_required, list) and missing_required:
+        document.add_paragraph(
+            "Campuri obligatorii lipsa: " + ", ".join(str(item) for item in missing_required)
+        )
+    else:
+        document.add_paragraph("Campuri obligatorii lipsa: -")
+
+    top_level_sections = [
+        ("Date Program", migrated_template.get("program", {})),
+        ("Date Disciplina", migrated_template.get("disciplina", {})),
+        ("Timp Total", migrated_template.get("timp", {})),
+        ("Preconditii", migrated_template.get("preconditii", {})),
+        ("Conditii", migrated_template.get("conditii", {})),
+        ("Competente", migrated_template.get("competente", {})),
+        ("Obiective", migrated_template.get("obiective", {})),
+        ("Continut", migrated_template.get("continut", {})),
+        ("Evaluare", migrated_template.get("evaluare", {})),
+    ]
+
+    for section_title, section_payload in top_level_sections:
+        rows = _flatten_template_for_docx(section_payload)
+        _append_docx_section(document, section_title, rows if rows else [("valoare", "")])
+
+    output_docx_path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(output_docx_path)
+
+
+def _migrate_fd_template_blocking(fisa_tmp: Path) -> dict:
+    if not FD_MIGRATION_TEMPLATE_PATH.exists():
+        raise FileNotFoundError(f"Template JSON not found: {FD_MIGRATION_TEMPLATE_PATH}")
+    if not FD_MIGRATION_MAPPING_PATH.exists():
+        raise FileNotFoundError(f"Mapping JSON not found: {FD_MIGRATION_MAPPING_PATH}")
+
+    canonical_model, migrated_template, full_report = migrate_fd_pdf_to_template(
+        input_pdf=fisa_tmp,
+        template_json_path=FD_MIGRATION_TEMPLATE_PATH,
+        mapping_json_path=FD_MIGRATION_MAPPING_PATH,
+        scanned=False,
+        ocr_lang="ro,en",
+    )
+
+    COMPARE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    file_token = uuid4().hex
+    canonical_name = f"fd_migration_{file_token}_canonical.json"
+    template_name = f"fd_migration_{file_token}_template.json"
+    report_name = f"fd_migration_{file_token}_report.json"
+    docx_name = f"fd_migration_{file_token}.docx"
+
+    canonical_path = COMPARE_OUTPUT_DIR / canonical_name
+    template_path = COMPARE_OUTPUT_DIR / template_name
+    report_path = COMPARE_OUTPUT_DIR / report_name
+    docx_path = COMPARE_OUTPUT_DIR / docx_name
+
+    canonical_path.write_text(json.dumps(canonical_model, ensure_ascii=False, indent=2), encoding="utf-8")
+    template_path.write_text(json.dumps(migrated_template, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_path.write_text(json.dumps(full_report, ensure_ascii=False, indent=2), encoding="utf-8")
+    _build_migrated_template_docx(
+        migrated_template=migrated_template,
+        report_payload=full_report,
+        output_docx_path=docx_path,
+    )
+
+    disciplina_payload = canonical_model.get("disciplina", {})
+    disciplina_name = "-"
+    if isinstance(disciplina_payload, dict):
+        disciplina_name = str(
+            migrated_template.get("disciplina", {}).get("denumire")
+            or disciplina_payload.get("nume")
+            or "-"
+        )
+
+    return {
+        "status": "success",
+        "message": "fd_template_migrated",
+        "disciplina": disciplina_name,
+        "coverage_required": float(full_report.get("coverage_required", 0.0)),
+        "required_fields_missing": full_report.get("required_fields_missing", []),
+        "template_preview": migrated_template,
+        "output_template_url": f"/migrate/fd-template-file/{template_name}",
+        "output_canonical_url": f"/migrate/fd-template-file/{canonical_name}",
+        "output_report_url": f"/migrate/fd-template-file/{report_name}",
+        "output_docx_url": f"/migrate/fd-template-file/{docx_name}",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1056,6 +1209,73 @@ def get_fd_single_prefill_docx(docx_name: str):
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=safe_name,
     )
+
+
+@app.post("/migrate/fd-template")
+async def migrate_fd_template(
+    fisa_pdf: UploadFile = File(..., description="PDF cu o singura Fisa de Disciplina"),
+) -> dict:
+    _ensure_fd_migration_dependencies()
+
+    with save_upload_to_temp_path(fisa_pdf) as fisa_tmp:
+        try:
+            result = await run_in_threadpool(
+                _migrate_fd_template_blocking,
+                fisa_tmp=fisa_tmp,
+            )
+            return result
+        except HTTPException:
+            raise
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "error",
+                    "message": "template_assets_not_found",
+                    "error": str(exc),
+                },
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "status": "error",
+                    "message": "fd_template_migration_failed",
+                    "error": str(exc),
+                },
+            ) from exc
+
+
+@app.get("/migrate/fd-template-file/{file_name}")
+def get_migrated_fd_template_file(file_name: str):
+    safe_name = Path(file_name).name
+    if safe_name != file_name or not safe_name.startswith("fd_migration_"):
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "message": "invalid_file_name"},
+        )
+
+    if not (safe_name.endswith(".json") or safe_name.endswith(".docx")):
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "message": "invalid_file_extension"},
+        )
+
+    file_path = COMPARE_OUTPUT_DIR / safe_name
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail={"status": "error", "message": "file_not_found"},
+        )
+
+    if safe_name.endswith(".docx"):
+        return FileResponse(
+            file_path,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename=safe_name,
+        )
+
+    return FileResponse(file_path, media_type="application/json", filename=safe_name)
 
 
 @app.post("/batch-update")
