@@ -464,6 +464,7 @@ async def batch_update(
     old_text: str = Form(..., description="Textul de căutat"),
     new_text: str = Form(..., description="Textul nou"),
     json_dir: str = Form("pdf"),
+    target_json_file: str | None = Form(None, description="Nume fișier JSON țintă (opțional)"),
 ) -> dict:
     if batch_update_json_files is None:
         raise HTTPException(status_code=501, detail="JSON batch update service not available")
@@ -479,7 +480,8 @@ async def batch_update(
         results = batch_update_json_files(
             directory=search_dir,
             old_text=old_text,
-            new_text=new_text
+            new_text=new_text,
+            target_file=target_json_file,
         )
         return {
             "status": "success",

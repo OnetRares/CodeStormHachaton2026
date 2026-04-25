@@ -758,3 +758,75 @@
   margin: 0.5rem 0 0;
   padding-left: 1.5rem;
 }
+
+.batchSentencePanel {
+  margin: 1rem auto 0;
+  max-width: 980px;
+  border: 1px solid #d6e2ef;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 1rem;
+}
+
+.batchSentenceHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.batchSentenceHeader h3 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.batchSentenceSummary {
+  margin-top: 0.5rem;
+  font-size: 0.86rem;
+  color: #334155;
+}
+
+.batchSentenceList {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.batchSentenceCard {
+  border: 1px solid #dbe7f4;
+  border-radius: 10px;
+  background: #f9fcff;
+  padding: 0.7rem;
+}
+
+.batchSentenceMeta {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  font-size: 0.76rem;
+  color: #475569;
+  font-weight: 700;
+}
+
+.batchSentenceTextWrap {
+  margin-top: 0.45rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.batchSentenceBefore,
+.batchSentenceAfter {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.batchSentenceBefore {
+  color: #334155;
+}
+
+.batchSentenceAfter {
+  color: #0f172a;
+}

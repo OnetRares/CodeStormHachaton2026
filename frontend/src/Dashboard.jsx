@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import styles from './Dashboard.module.css';
-import { comparePdfsVisual } from './services/compareApi';
 import { batchUpdate } from './services/batchUpdateApi';
 import {
   comparePdfsVisual,
@@ -270,6 +269,8 @@ export default function Dashboard({ onLogout }) {
   const [oldText, setOldText] = useState('');
   const [newText, setNewText] = useState('');
   const [batchResults, setBatchResults] = useState(null);
+  const [targetJsonFile, setTargetJsonFile] = useState('fisa_disciplina_out.json');
+  const [selectedBatchFile, setSelectedBatchFile] = useState('');
 
   const fdAInputRef = useRef(null);
   const fdBInputRef = useRef(null);
@@ -355,7 +356,7 @@ export default function Dashboard({ onLogout }) {
 
   const handleBatchUpdate = async () => {
     if (!oldText.trim()) {
-      setError('Te rugăm să introduci textul de căutat.');
+      setError('Te rugam sa introduci textul de cautat.');
       return;
     }
 
@@ -364,12 +365,14 @@ export default function Dashboard({ onLogout }) {
     setBatchResults(null);
 
     try {
-      const response = await batchUpdate(oldText, newText);
+      const response = await batchUpdate(oldText, newText, {
+        targetJsonFile: targetJsonFile.trim() || undefined,
+      });
       setBatchResults(response.results);
-      // setOldText(''); // Don't clear to let user see what they updated
-      // setNewText('');
+      const firstFile = response?.results?.file_details?.[0]?.file || '';
+      setSelectedBatchFile(firstFile);
     } catch (err) {
-      setError(err.message || 'Actualizarea în masă a eșuat.');
+      setError(err.message || 'Actualizarea in masa a esuat.');
     } finally {
       setLoading(false);
     }
@@ -388,6 +391,11 @@ export default function Dashboard({ onLogout }) {
   const validationSummary = validationResult?.sumar;
   const validationRows = Array.isArray(validationResult?.rezultate) ? validationResult.rezultate : [];
   const subjectOptions = competenceSubjects;
+  const batchFileDetails = Array.isArray(batchResults?.file_details) ? batchResults.file_details : [];
+  const selectedBatchDetail = batchFileDetails.find((item) => item.file === selectedBatchFile) || batchFileDetails[0] || null;
+  const selectedSentenceExamples = Array.isArray(selectedBatchDetail?.sentence_examples)
+    ? selectedBatchDetail.sentence_examples
+    : [];
   const resultTitle = resultTab === 'validation' ? 'FD vs Plan Master Differences' : 'Side-by-Side Visual Comparison';
 
   const handleShowSubjectCompetencies = async () => {
@@ -444,29 +452,29 @@ export default function Dashboard({ onLogout }) {
           <section className={styles.uploadSection}>
             <h1 className={styles.sectionTitle}>Global Batch Update</h1>
             <p className={styles.infoText}>
-              Această funcție îți permite să modifici un text în toate fișele și planurile de învățământ simultan.
-              De exemplu, poți schimba numele universității sau al unei discipline peste tot.
+              Aceasta functie iti permite sa modifici un text in toate fisierele si planurile simultan.
+              De exemplu, poti schimba un nume de disciplina peste tot.
             </p>
 
             {error && <div className={styles.errorBox}>{error}</div>}
             {batchResults && (
               <div className={styles.successBox}>
-                <h3>Actualizare reușită!</h3>
+                <h3>Actualizare reusita!</h3>
                 <ul>
-                  <li>Fișiere actualizate: {batchResults.files_updated}</li>
-                  <li>Total modificări: {batchResults.total_matches}</li>
+                  <li>Fisiere actualizate: {batchResults.files_updated}</li>
+                  <li>Total modificari: {batchResults.total_matches}</li>
                 </ul>
               </div>
             )}
 
             <div className={styles.batchForm}>
               <div className={styles.inputGroup}>
-                <label>Text de căutat (vechi)</label>
+                <label>Text de cautat (vechi)</label>
                 <input 
                   type="text" 
                   value={oldText} 
                   onChange={(e) => setOldText(e.target.value)}
-                  placeholder="Ex: Universitatea Veche"
+                  placeholder="Ex: Analiza"
                   className={styles.textInput}
                 />
               </div>
@@ -476,7 +484,17 @@ export default function Dashboard({ onLogout }) {
                   type="text" 
                   value={newText} 
                   onChange={(e) => setNewText(e.target.value)}
-                  placeholder="Ex: Universitatea Nouă"
+                  placeholder="Ex: Analiza 6"
+                  className={styles.textInput}
+                />
+              </div>
+              <div className={styles.inputGroup}>
+                <label>Fisier JSON tinta (optional)</label>
+                <input
+                  type="text"
+                  value={targetJsonFile}
+                  onChange={(e) => setTargetJsonFile(e.target.value)}
+                  placeholder="Ex: fisa_disciplina_out.json"
                   className={styles.textInput}
                 />
               </div>
@@ -486,10 +504,61 @@ export default function Dashboard({ onLogout }) {
                   onClick={handleBatchUpdate} 
                   disabled={loading || !oldText.trim()}
                 >
-                  {loading ? 'Se actualizează...' : 'Aplică Modificările în Masă'}
+                  {loading ? 'Se actualizeaza...' : 'Aplica modificarile in masa'}
                 </button>
               </div>
             </div>
+
+            {batchResults && (
+              <section className={styles.batchSentencePanel}>
+                <div className={styles.batchSentenceHeader}>
+                  <h3>Propozitii modificate</h3>
+                  {batchFileDetails.length > 1 ? (
+                    <select
+                      className={styles.subjectSelect}
+                      value={selectedBatchDetail?.file || ''}
+                      onChange={(event) => setSelectedBatchFile(event.target.value)}
+                    >
+                      {batchFileDetails.map((detail) => (
+                        <option key={detail.file} value={detail.file}>
+                          {detail.file}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
+
+                {selectedBatchDetail ? (
+                  <p className={styles.batchSentenceSummary}>
+                    Fisier: <strong>{selectedBatchDetail.file}</strong> | Inlocuiri: <strong>{selectedBatchDetail.matches}</strong> | Propozitii gasite: <strong>{selectedSentenceExamples.length}</strong>
+                  </p>
+                ) : null}
+
+                {selectedSentenceExamples.length === 0 ? (
+                  <div className={styles.emptyState}>Nu exista propozitii modificate pentru selectia curenta.</div>
+                ) : (
+                  <div className={styles.batchSentenceList}>
+                    {selectedSentenceExamples.map((entry, index) => (
+                      <article key={`${entry.file}-${entry.page ?? 'no-page'}-${index}`} className={styles.batchSentenceCard}>
+                        <div className={styles.batchSentenceMeta}>
+                          <span>#{index + 1}</span>
+                          <span>Pagina: {entry.page ?? '-'}</span>
+                          <span>Aparitii: {entry.occurrences ?? 1}</span>
+                        </div>
+                        <div className={styles.batchSentenceTextWrap}>
+                          <p className={styles.batchSentenceBefore}>
+                            <strong>Inainte:</strong> {entry.before}
+                          </p>
+                          <p className={styles.batchSentenceAfter}>
+                            <strong>Dupa:</strong> {entry.after}
+                          </p>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
           </section>
         ) : viewMode === 'upload' ? (
           <section className={styles.uploadSection}>
