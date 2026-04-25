@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import styles from './Dashboard.module.css';
 import { comparePdfsVisual } from './services/compareApi';
+import { batchUpdate } from './services/batchUpdateApi';
 
 const UploadIcon = () => (
   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -228,10 +229,15 @@ export default function Dashboard({ onLogout }) {
   const [fdFileA, setFdFileA] = useState(null);
   const [fdFileB, setFdFileB] = useState(null);
   const [piFile, setPiFile] = useState(null);
-  const [viewMode, setViewMode] = useState('upload');
+  const [viewMode, setViewMode] = useState('upload'); // 'upload', 'results', 'batch'
   const [comparisonResult, setComparisonResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Batch update states
+  const [oldText, setOldText] = useState('');
+  const [newText, setNewText] = useState('');
+  const [batchResults, setBatchResults] = useState(null);
 
   const fdAInputRef = useRef(null);
   const fdBInputRef = useRef(null);
@@ -266,6 +272,28 @@ export default function Dashboard({ onLogout }) {
     }
   };
 
+  const handleBatchUpdate = async () => {
+    if (!oldText.trim()) {
+      setError('Te rugăm să introduci textul de căutat.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setBatchResults(null);
+
+    try {
+      const response = await batchUpdate(oldText, newText);
+      setBatchResults(response.results);
+      // setOldText(''); // Don't clear to let user see what they updated
+      // setNewText('');
+    } catch (err) {
+      setError(err.message || 'Actualizarea în masă a eșuat.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const changes = comparisonResult?.changes || [];
   const globalLeftTokenSet = new Set(
     changes
@@ -281,13 +309,78 @@ export default function Dashboard({ onLogout }) {
     <div className={styles.container}>
       <header className={styles.header}>
         <div className={styles.logo}>DocManage AI</div>
+        <div className={styles.navGroup}>
+          <button 
+            className={`${styles.navButton} ${viewMode === 'upload' || viewMode === 'results' ? styles.activeNav : ''}`}
+            onClick={() => setViewMode('upload')}
+          >
+            Visual Comparison
+          </button>
+          <button 
+            className={`${styles.navButton} ${viewMode === 'batch' ? styles.activeNav : ''}`}
+            onClick={() => setViewMode('batch')}
+          >
+            Batch Update
+          </button>
+        </div>
         <button className={styles.logoutButton} onClick={onLogout}>
           <LogoutIcon /> <span>Logout</span>
         </button>
       </header>
 
       <main className={styles.main}>
-        {viewMode === 'upload' ? (
+        {viewMode === 'batch' ? (
+          <section className={styles.uploadSection}>
+            <h1 className={styles.sectionTitle}>Global Batch Update</h1>
+            <p className={styles.infoText}>
+              Această funcție îți permite să modifici un text în toate fișele și planurile de învățământ simultan.
+              De exemplu, poți schimba numele universității sau al unei discipline peste tot.
+            </p>
+
+            {error && <div className={styles.errorBox}>{error}</div>}
+            {batchResults && (
+              <div className={styles.successBox}>
+                <h3>Actualizare reușită!</h3>
+                <ul>
+                  <li>Fișiere actualizate: {batchResults.files_updated}</li>
+                  <li>Total modificări: {batchResults.total_matches}</li>
+                </ul>
+              </div>
+            )}
+
+            <div className={styles.batchForm}>
+              <div className={styles.inputGroup}>
+                <label>Text de căutat (vechi)</label>
+                <input 
+                  type="text" 
+                  value={oldText} 
+                  onChange={(e) => setOldText(e.target.value)}
+                  placeholder="Ex: Universitatea Veche"
+                  className={styles.textInput}
+                />
+              </div>
+              <div className={styles.inputGroup}>
+                <label>Text nou</label>
+                <input 
+                  type="text" 
+                  value={newText} 
+                  onChange={(e) => setNewText(e.target.value)}
+                  placeholder="Ex: Universitatea Nouă"
+                  className={styles.textInput}
+                />
+              </div>
+              <div className={styles.buttonRow}>
+                <button 
+                  className={styles.analyzeButton} 
+                  onClick={handleBatchUpdate} 
+                  disabled={loading || !oldText.trim()}
+                >
+                  {loading ? 'Se actualizează...' : 'Aplică Modificările în Masă'}
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : viewMode === 'upload' ? (
           <section className={styles.uploadSection}>
             <h1 className={styles.sectionTitle}>Upload PDFs for Visual Comparison</h1>
 

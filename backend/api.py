@@ -56,6 +56,11 @@ except ModuleNotFoundError as exc:
     run_pipeline = None
     PDF_INGESTION_IMPORT_ERROR = exc
 
+try:
+    from json_batch_update import batch_update_json_files
+except ImportError:
+    batch_update_json_files = None
+
 app = FastAPI(title="PDF Ingestion & Validation Service", version="2.0.0")
 BASE_DIR = Path(__file__).resolve().parent
 COMPARE_OUTPUT_DIR = BASE_DIR / "compare_output"
@@ -404,3 +409,40 @@ async def validate(
                     "error": str(exc),
                 },
             ) from exc
+
+@app.post("/batch-update")
+async def batch_update(
+    old_text: str = Form(..., description="Textul de căutat"),
+    new_text: str = Form(..., description="Textul nou"),
+    json_dir: str = Form("pdf"),
+) -> dict:
+    if batch_update_json_files is None:
+        raise HTTPException(status_code=501, detail="JSON batch update service not available")
+    
+    try:
+        search_dir = Path(json_dir)
+        if not search_dir.exists():
+            search_dir = BASE_DIR / json_dir
+            
+        if not search_dir.exists():
+             raise FileNotFoundError(f"Folderul cu JSON-uri nu a fost găsit: {json_dir}")
+
+        results = batch_update_json_files(
+            directory=search_dir,
+            old_text=old_text,
+            new_text=new_text
+        )
+        return {
+            "status": "success",
+            "results": results,
+            "directory_used": str(search_dir)
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "message": "Eroare la actualizarea fișierelor JSON.",
+                "error": str(exc),
+            },
+        )

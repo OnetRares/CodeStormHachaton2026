@@ -350,3 +350,73 @@
     flex-direction: column;
   }
 }
+
+.navGroup {
+  display: flex;
+  gap: 1rem;
+}
+
+.navButton {
+  background: none;
+  border: none;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #64748b;
+  border-bottom: 2px solid transparent;
+}
+
+.activeNav {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+}
+
+.batchForm {
+  margin: 2rem auto;
+  max-width: 600px;
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.inputGroup label {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.textInput {
+  padding: 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.successBox {
+  margin: 1.25rem auto 0;
+  max-width: 900px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.successBox h3 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.successBox ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.5rem;
+}
