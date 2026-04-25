@@ -36,7 +36,7 @@ const mockAuditData = [
 ];
 
 // Componenta mică pentru Badge-uri de Status
-const StatusBadge = ({ type, status }) => {
+const StatusBadge = ({ status }) => {
   const isError = status === "VAG" || status === "INVECHITA";
   
   return (

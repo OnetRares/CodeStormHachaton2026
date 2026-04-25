@@ -187,3 +187,76 @@ export async function fetchWeightsHoursCheck(dbPath = 'data/discipline_new.db') 
 
   return payload;
 }
+
+export async function fetchAiAuditorSubjects(dbPath = 'data/discipline_new.db') {
+  const query = new URLSearchParams();
+  const normalizedDbPath = String(dbPath || '').trim();
+  if (normalizedDbPath) {
+    query.set('db_path', normalizedDbPath);
+  }
+
+  const queryString = query.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/ai-auditor/subjects${queryString ? `?${queryString}` : ''}`,
+  );
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(normalizeValidationErrorPayload(payload));
+  }
+
+  return Array.isArray(payload?.subjects) ? payload.subjects : [];
+}
+
+export async function runAiAuditorForSubject(fisaId, options = {}) {
+  const body = {
+    fisa_id: Number(fisaId),
+  };
+
+  if (typeof options.dbPath === 'string' && options.dbPath.trim() !== '') {
+    body.db_path = options.dbPath.trim();
+  }
+  if (typeof options.allowAi === 'boolean') {
+    body.allow_ai = options.allowAi;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/ai-auditor/run`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(normalizeValidationErrorPayload(payload));
+  }
+
+  return payload;
+}
+
+export async function runAiAuditorAllSubjects(options = {}) {
+  const body = {};
+  if (typeof options.dbPath === 'string' && options.dbPath.trim() !== '') {
+    body.db_path = options.dbPath.trim();
+  }
+  if (typeof options.allowAi === 'boolean') {
+    body.allow_ai = options.allowAi;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/ai-auditor/run-all`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(normalizeValidationErrorPayload(payload));
+  }
+
+  return payload;
+}

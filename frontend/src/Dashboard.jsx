@@ -3,11 +3,14 @@ import styles from './Dashboard.module.css';
 import { batchUpdate } from './services/batchUpdateApi';
 import {
   comparePdfsVisual,
+  fetchAiAuditorSubjects,
   fetchCompetencySubjects,
   fetchWeightsHoursCheck,
   fetchRecommendedCompetencies,
   migrateFdToTemplate,
   prefillSingleFdTemplateFromPi,
+  runAiAuditorAllSubjects,
+  runAiAuditorForSubject,
   validateSingleFdPdf,
   validateFdAgainstPlanMaster,
 } from './services/compareApi';
@@ -72,6 +75,10 @@ function getCheckStatusClass(status) {
   if (status === 'ok') return styles.smallBadgeOk;
   if (status === 'missing') return styles.smallBadgeMissing;
   return styles.smallBadgeBad;
+}
+
+function isAuditPositiveStatus(status) {
+  return status === 'DETALIAT' || status === 'ACTUALIZATA';
 }
 
 function formatDetailValue(value) {
@@ -271,7 +278,7 @@ export default function Dashboard({ onLogout }) {
   const [fdSingleFile, setFdSingleFile] = useState(null);
   const [fdPrefillFile, setFdPrefillFile] = useState(null);
   const [fdMigrationFile, setFdMigrationFile] = useState(null);
-  const [viewMode, setViewMode] = useState('upload'); // 'upload', 'results', 'batch', 'quality', 'fdsingle', 'fdprefill', 'fdmigrate'
+  const [viewMode, setViewMode] = useState('upload'); // 'upload', 'results', 'batch', 'quality', 'fdsingle', 'fdprefill', 'fdmigrate', 'aiauditor'
   const [comparisonResult, setComparisonResult] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
   const [singleFdValidationResult, setSingleFdValidationResult] = useState(null);
@@ -286,6 +293,14 @@ export default function Dashboard({ onLogout }) {
   const [selectedCompetencies, setSelectedCompetencies] = useState([]);
   const [competenceLookupMessage, setCompetenceLookupMessage] = useState('');
   const [competenceLoading, setCompetenceLoading] = useState(false);
+  const [aiAuditorSubjects, setAiAuditorSubjects] = useState([]);
+  const [aiSelectedSubjectId, setAiSelectedSubjectId] = useState('');
+  const [aiAuditResult, setAiAuditResult] = useState(null);
+  const [aiAuditInfo, setAiAuditInfo] = useState('');
+  const [aiAuditRows, setAiAuditRows] = useState([]);
+  const [aiAuditSummary, setAiAuditSummary] = useState(null);
+  const [aiAuditFilter, setAiAuditFilter] = useState('problem');
+  const [copiedSuggestionIndex, setCopiedSuggestionIndex] = useState(null);
 
   // Batch update states
   const [oldText, setOldText] = useState('');
@@ -321,7 +336,25 @@ export default function Dashboard({ onLogout }) {
       }
     };
 
+    const loadAiAuditorSubjects = async () => {
+      try {
+        const subjects = await fetchAiAuditorSubjects();
+        if (cancelled) return;
+        setAiAuditorSubjects(subjects);
+        if (subjects.length > 0) {
+          setAiSelectedSubjectId(String(subjects[0].id));
+        }
+        if (subjects.length === 0) {
+          setAiAuditInfo('Nu exista materii disponibile pentru audit.');
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setAiAuditInfo(err.message || 'Nu am putut incarca materiile pentru AI Auditor.');
+      }
+    };
+
     loadCompetencySubjects();
+    loadAiAuditorSubjects();
     return () => {
       cancelled = true;
     };
@@ -502,6 +535,84 @@ export default function Dashboard({ onLogout }) {
     }
   };
 
+  const handleRunAiAudit = async () => {
+    if (!aiSelectedSubjectId) {
+      setError('Selecteaza o materie pentru audit.');
+      return;
+    }
+
+    setLoading(true);
+    setActiveAction('ai-audit');
+    setError('');
+    setAiAuditResult(null);
+    setAiAuditInfo('');
+    setCopiedSuggestionIndex(null);
+
+    try {
+      const response = await runAiAuditorForSubject(Number(aiSelectedSubjectId));
+      setAiAuditResult(response);
+      if (response?.source === 'gemini') {
+        setAiAuditInfo('Audit realizat cu AI Auditor (Gemini).');
+      } else {
+        setAiAuditInfo('Audit realizat local (fallback rule-based).');
+      }
+    } catch (err) {
+      setError(err.message || 'Auditul AI a esuat.');
+    } finally {
+      setLoading(false);
+      setActiveAction(null);
+    }
+  };
+
+  const handleRunAiAuditAll = async () => {
+    setLoading(true);
+    setActiveAction('ai-audit-all');
+    setError('');
+    setAiAuditInfo('');
+    setCopiedSuggestionIndex(null);
+
+    try {
+      const response = await runAiAuditorAllSubjects({ allowAi: false });
+      const rows = Array.isArray(response?.rows) ? response.rows : [];
+      setAiAuditRows(rows);
+      setAiAuditSummary(response?.summary || null);
+      setAiAuditFilter('problem');
+
+      if (rows.length > 0) {
+        const firstProblem = rows.find((item) => item?.is_problem);
+        const firstItem = firstProblem || rows[0];
+        setAiSelectedSubjectId(String(firstItem?.fisa_id || ''));
+        setAiAuditResult(firstItem);
+      }
+      setAiAuditInfo('Scan rapid complet: poti filtra instant materiile cu probleme.');
+    } catch (err) {
+      setError(err.message || 'Scanarea rapida AI Auditor a esuat.');
+    } finally {
+      setLoading(false);
+      setActiveAction(null);
+    }
+  };
+
+  const handleSelectAiAuditRow = (row) => {
+    if (!row) return;
+    setAiSelectedSubjectId(String(row.fisa_id || ''));
+    setAiAuditResult(row);
+    setCopiedSuggestionIndex(null);
+    setError('');
+  };
+
+  const handleCopySuggestion = async (suggestionText, index) => {
+    try {
+      await navigator.clipboard.writeText(String(suggestionText || ''));
+      setCopiedSuggestionIndex(index);
+      window.setTimeout(() => {
+        setCopiedSuggestionIndex((current) => (current === index ? null : current));
+      }, 1500);
+    } catch {
+      setError('Nu am putut copia sugestia in clipboard.');
+    }
+  };
+
   const changes = comparisonResult?.changes || [];
   const globalLeftTokenSet = new Set(
     changes
@@ -542,6 +653,24 @@ export default function Dashboard({ onLogout }) {
     : [];
   const fdMigrationCoveragePercent = Number(singleFdMigrationResult?.coverage_required ?? 0) * 100;
   const fdMigrationTemplatePreview = singleFdMigrationResult?.template_preview || null;
+  const aiAuditTopic = aiAuditResult?.audit_tematica || null;
+  const aiAuditBibliography = aiAuditResult?.audit_bibliografie || null;
+  const aiAuditSuggestions = Array.isArray(aiAuditTopic?.sugestii_imbunatatire)
+    ? aiAuditTopic.sugestii_imbunatatire
+    : [];
+  const aiSelectedSubjectName =
+    aiAuditorSubjects.find((subject) => String(subject.id) === String(aiSelectedSubjectId))?.name || '-';
+  const aiProblemCount = Number(
+    aiAuditSummary?.problem ?? aiAuditRows.filter((row) => Boolean(row?.is_problem)).length,
+  );
+  const aiOkCount = Number(
+    aiAuditSummary?.ok ?? aiAuditRows.filter((row) => row?.is_problem === false).length,
+  );
+  const aiFilteredRows = aiAuditRows.filter((row) => {
+    if (aiAuditFilter === 'problem') return Boolean(row?.is_problem);
+    if (aiAuditFilter === 'ok') return row?.is_problem === false;
+    return true;
+  });
   const resultTitle = resultTab === 'validation' ? 'FD vs Plan Master Differences' : 'Side-by-Side Visual Comparison';
 
   const handleShowSubjectCompetencies = async () => {
@@ -610,6 +739,12 @@ export default function Dashboard({ onLogout }) {
             onClick={() => setViewMode('fdmigrate')}
           >
             FD Migrare
+          </button>
+          <button
+            className={`${styles.navButton} ${viewMode === 'aiauditor' ? styles.activeNav : ''}`}
+            onClick={() => setViewMode('aiauditor')}
+          >
+            AI Auditor
           </button>
         </div>
         <button className={styles.logoutButton} onClick={onLogout}>
@@ -1131,6 +1266,199 @@ export default function Dashboard({ onLogout }) {
                     <pre className={styles.jsonCode}>
                       {JSON.stringify(fdMigrationTemplatePreview, null, 2)}
                     </pre>
+                  </section>
+                ) : null}
+              </section>
+            ) : null}
+          </section>
+        ) : viewMode === 'aiauditor' ? (
+          <section className={styles.uploadSection}>
+            <h1 className={styles.sectionTitle}>AI Auditor: Tematica si Bibliografie</h1>
+            <p className={styles.infoText}>
+              Selecteaza materia si ruleaza auditul pentru identificare continut vag si bibliografie neactualizata.
+            </p>
+
+            {error && <div className={styles.errorBox}>{error}</div>}
+
+            <div className={styles.batchForm}>
+              <div className={styles.inputGroup}>
+                <label>Materie</label>
+                <select
+                  className={styles.subjectSelect}
+                  value={aiSelectedSubjectId}
+                  onChange={(event) => {
+                    setAiSelectedSubjectId(event.target.value);
+                    setAiAuditResult(null);
+                    setAiAuditInfo('');
+                    setCopiedSuggestionIndex(null);
+                    setError('');
+                  }}
+                  disabled={aiAuditorSubjects.length === 0}
+                >
+                  <option value="">Selecteaza materia</option>
+                  {aiAuditorSubjects.map((subject) => (
+                    <option key={subject.id} value={String(subject.id)}>
+                      {subject.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className={styles.buttonRow}>
+                <button
+                  className={styles.analyzeButton}
+                  onClick={handleRunAiAudit}
+                  disabled={loading || !aiSelectedSubjectId}
+                >
+                  {loading && activeAction === 'ai-audit' ? 'Se analizeaza...' : 'Ruleaza AI Auditor'}
+                </button>
+                <button
+                  className={styles.secondaryButton}
+                  onClick={handleRunAiAuditAll}
+                  disabled={loading || aiAuditorSubjects.length === 0}
+                >
+                  {loading && activeAction === 'ai-audit-all'
+                    ? 'Se scaneaza...'
+                    : 'Scan rapid toate materiile'}
+                </button>
+              </div>
+            </div>
+
+            {aiAuditInfo ? <p className={styles.auditInfoText}>{aiAuditInfo}</p> : null}
+
+            {aiAuditRows.length > 0 ? (
+              <section className={styles.auditListPanel}>
+                <div className={styles.auditListHeader}>
+                  <h3>Rezultate scan rapid</h3>
+                  <div className={styles.qualityFilterRow}>
+                    <button
+                      className={`${styles.filterButton} ${aiAuditFilter === 'problem' ? styles.filterButtonActive : ''}`}
+                      onClick={() => setAiAuditFilter('problem')}
+                    >
+                      Probleme ({aiProblemCount})
+                    </button>
+                    <button
+                      className={`${styles.filterButton} ${aiAuditFilter === 'ok' ? styles.filterButtonActive : ''}`}
+                      onClick={() => setAiAuditFilter('ok')}
+                    >
+                      OK ({aiOkCount})
+                    </button>
+                    <button
+                      className={`${styles.filterButton} ${aiAuditFilter === 'all' ? styles.filterButtonActive : ''}`}
+                      onClick={() => setAiAuditFilter('all')}
+                    >
+                      Toate ({aiAuditRows.length})
+                    </button>
+                  </div>
+                </div>
+
+                {aiFilteredRows.length === 0 ? (
+                  <div className={styles.emptyState}>Nu exista materii pentru filtrul selectat.</div>
+                ) : (
+                  <div className={styles.auditRowList}>
+                    {aiFilteredRows.map((row) => (
+                      <button
+                        type="button"
+                        key={`audit-row-${row.fisa_id}`}
+                        className={`${styles.auditRowCard} ${
+                          String(row?.fisa_id) === String(aiSelectedSubjectId) ? styles.auditRowCardActive : ''
+                        }`}
+                        onClick={() => handleSelectAiAuditRow(row)}
+                      >
+                        <div className={styles.auditRowTop}>
+                          <span className={styles.auditRowName}>{row?.nume_materie || `Disciplina #${row?.fisa_id}`}</span>
+                          <span className={`${styles.auditBadge} ${row?.is_problem ? styles.auditBadgeBad : styles.auditBadgeGood}`}>
+                            {row?.is_problem ? 'PROBLEMA' : 'OK'}
+                          </span>
+                        </div>
+                        <div className={styles.auditRowBadges}>
+                          <span
+                            className={`${styles.auditBadge} ${
+                              isAuditPositiveStatus(row?.audit_tematica?.status) ? styles.auditBadgeGood : styles.auditBadgeBad
+                            }`}
+                          >
+                            Tematica: {row?.audit_tematica?.status || '-'}
+                          </span>
+                          <span
+                            className={`${styles.auditBadge} ${
+                              isAuditPositiveStatus(row?.audit_bibliografie?.status)
+                                ? styles.auditBadgeGood
+                                : styles.auditBadgeBad
+                            }`}
+                          >
+                            Bibliografie: {row?.audit_bibliografie?.status || '-'}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : null}
+
+            {aiAuditResult ? (
+              <section className={styles.auditPanel}>
+                <div className={styles.metricGrid}>
+                  <MetricCard label="Materie" value={aiAuditResult.nume_materie || aiSelectedSubjectName} />
+                  <MetricCard label="Sursa audit" value={(aiAuditResult.source || '-').toUpperCase()} />
+                  <MetricCard
+                    label="An bibliografie (max)"
+                    value={aiAuditBibliography?.cel_mai_nou_an_gasit ?? '-'}
+                  />
+                </div>
+
+                <div className={styles.auditGrid}>
+                  <article className={styles.auditCard}>
+                    <div className={styles.auditHeaderRow}>
+                      <h3 className={styles.auditTitle}>Tematica</h3>
+                      <span
+                        className={`${styles.auditBadge} ${
+                          isAuditPositiveStatus(aiAuditTopic?.status) ? styles.auditBadgeGood : styles.auditBadgeBad
+                        }`}
+                      >
+                        {aiAuditTopic?.status || '-'}
+                      </span>
+                    </div>
+                    <p className={styles.auditExplanation}>{aiAuditTopic?.explicatie || '-'}</p>
+                  </article>
+
+                  <article className={styles.auditCard}>
+                    <div className={styles.auditHeaderRow}>
+                      <h3 className={styles.auditTitle}>Bibliografie</h3>
+                      <span
+                        className={`${styles.auditBadge} ${
+                          isAuditPositiveStatus(aiAuditBibliography?.status)
+                            ? styles.auditBadgeGood
+                            : styles.auditBadgeBad
+                        }`}
+                      >
+                        {aiAuditBibliography?.status || '-'}
+                      </span>
+                    </div>
+                    <p className={styles.auditExplanation}>{aiAuditBibliography?.explicatie || '-'}</p>
+                  </article>
+                </div>
+
+                {aiAuditSuggestions.length > 0 ? (
+                  <section className={styles.suggestionBox}>
+                    <h3 className={styles.suggestionTitle}>Sugestii de imbunatatire (click pentru copy)</h3>
+                    <div className={styles.suggestionList}>
+                      {aiAuditSuggestions.map((suggestion, index) => (
+                        <button
+                          type="button"
+                          key={`ai-suggestion-${index}`}
+                          className={`${styles.suggestionButton} ${
+                            copiedSuggestionIndex === index ? styles.suggestionCopied : ''
+                          }`}
+                          onClick={() => handleCopySuggestion(suggestion, index)}
+                        >
+                          <span className={styles.suggestionIndex}>AI #{index + 1}</span>
+                          <span>{suggestion}</span>
+                          <span className={styles.suggestionHint}>
+                            {copiedSuggestionIndex === index ? 'Copiat' : 'Click to copy'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </section>
                 ) : null}
               </section>

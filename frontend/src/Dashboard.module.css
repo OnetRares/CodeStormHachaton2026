@@ -661,6 +661,10 @@
     grid-template-columns: 1fr;
   }
 
+  .auditGrid {
+    grid-template-columns: 1fr;
+  }
+
   .detailGrid {
     grid-template-columns: 1fr;
   }
@@ -1160,4 +1164,201 @@
   overflow: auto;
   font-size: 0.78rem;
   line-height: 1.45;
+}
+
+.auditInfoText {
+  margin: 0.7rem auto 0;
+  max-width: 960px;
+  font-size: 0.86rem;
+  color: #475569;
+  text-align: center;
+}
+
+.auditPanel {
+  margin: 1.1rem auto 0;
+  max-width: 1080px;
+  border: 1px solid #d6e2ef;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 1rem;
+}
+
+.auditListPanel {
+  margin: 1rem auto 0;
+  max-width: 1080px;
+  border: 1px solid #d6e2ef;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 0.85rem;
+}
+
+.auditListHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.auditListHeader h3 {
+  font-family: var(--font-display);
+  font-size: 0.96rem;
+  color: #0f172a;
+}
+
+.auditRowList {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.auditRowCard {
+  border: 1px solid #dbe7f4;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 0.65rem;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.auditRowCard:hover {
+  transform: translateY(-1px);
+  border-color: #60a5fa;
+  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.14);
+}
+
+.auditRowCardActive {
+  border-color: #0ea5e9;
+  box-shadow: 0 8px 18px rgba(14, 165, 233, 0.2);
+}
+
+.auditRowTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.auditRowName {
+  color: #0f172a;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.auditRowBadges {
+  margin-top: 0.45rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+}
+
+.auditGrid {
+  margin-top: 0.4rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.auditCard {
+  border-radius: 12px;
+  border: 1px solid #dbe7f4;
+  background: #f9fcff;
+  padding: 0.8rem;
+}
+
+.auditHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.auditTitle {
+  font-family: var(--font-display);
+  font-size: 0.96rem;
+  color: #0f172a;
+}
+
+.auditBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.18rem 0.56rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.auditBadgeGood {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.auditBadgeBad {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.auditExplanation {
+  margin-top: 0.5rem;
+  font-size: 0.84rem;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.suggestionBox {
+  margin-top: 0.85rem;
+  border-radius: 12px;
+  border: 1px solid #bfdbfe;
+  background: linear-gradient(135deg, #eff6ff, #f8fafc);
+  padding: 0.8rem;
+}
+
+.suggestionTitle {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.suggestionList {
+  margin-top: 0.65rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.suggestionButton {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  text-align: left;
+  padding: 0.62rem 0.7rem;
+  cursor: pointer;
+  display: grid;
+  gap: 0.26rem;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.suggestionButton:hover {
+  transform: translateY(-1px);
+  border-color: #60a5fa;
+  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.18);
+}
+
+.suggestionCopied {
+  border-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.suggestionIndex {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #0369a1;
+}
+
+.suggestionHint {
+  font-size: 0.72rem;
+  color: #64748b;
 }

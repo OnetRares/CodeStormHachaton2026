@@ -10,6 +10,7 @@ import base64
 import hashlib
 import hmac
 import tempfile
+from datetime import datetime
 from pathlib import Path
 import unicodedata
 from typing import Generator
@@ -86,6 +87,27 @@ except ImportError:
     check_weights_hours_db = None
 
 try:
+    from ai_auditor_service import (
+        list_ai_auditor_subjects,
+        run_ai_auditor_for_all_subjects,
+        run_ai_auditor_for_subject,
+    )
+    AI_AUDITOR_IMPORT_ERROR = None
+except ModuleNotFoundError:
+    try:
+        from backend.ai_auditor_service import (
+            list_ai_auditor_subjects,
+            run_ai_auditor_for_all_subjects,
+            run_ai_auditor_for_subject,
+        )
+        AI_AUDITOR_IMPORT_ERROR = None
+    except ModuleNotFoundError as exc:
+        list_ai_auditor_subjects = None
+        run_ai_auditor_for_all_subjects = None
+        run_ai_auditor_for_subject = None
+        AI_AUDITOR_IMPORT_ERROR = exc
+
+try:
     from validator_fd import load_fd_from_input, run_validation
     FD_VALIDATOR_IMPORT_ERROR = None
 except ModuleNotFoundError:
@@ -160,6 +182,17 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class AiAuditorRunRequest(BaseModel):
+    fisa_id: int
+    db_path: str = "data/discipline_new.db"
+    allow_ai: bool = True
+
+
+class AiAuditorRunAllRequest(BaseModel):
+    db_path: str = "data/discipline_new.db"
+    allow_ai: bool = False
 
 
 # Adăugăm middleware-ul pentru CORS
@@ -322,6 +355,21 @@ def _ensure_fd_migration_dependencies() -> None:
             "message": "missing_backend_dependency",
             "error": str(missing_dependency_error),
             "hint": "Install backend requirements to use FD template migration endpoint.",
+        },
+    )
+
+
+def _ensure_ai_auditor_dependencies() -> None:
+    if AI_AUDITOR_IMPORT_ERROR is None:
+        return
+
+    raise HTTPException(
+        status_code=500,
+        detail={
+            "status": "error",
+            "message": "missing_backend_dependency",
+            "error": str(AI_AUDITOR_IMPORT_ERROR),
+            "hint": "Install backend requirements to use AI Auditor endpoints.",
         },
     )
 
@@ -788,6 +836,116 @@ def get_competencies_for_subject(subject: str) -> dict:
         "count": len(competencies),
         "competencies": competencies,
     }
+
+
+@app.get("/ai-auditor/subjects")
+async def get_ai_auditor_subjects(
+    db_path: str = "data/discipline_new.db",
+) -> dict:
+    _ensure_ai_auditor_dependencies()
+    try:
+        resolved_db_path = _resolve_existing_path(db_path)
+        subjects = await run_in_threadpool(list_ai_auditor_subjects, resolved_db_path)
+        return {
+            "status": "success",
+            "subjects": subjects,
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "status": "error",
+                "message": "database_not_found",
+                "error": str(exc),
+            },
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "message": "ai_auditor_subjects_failed",
+                "error": str(exc),
+            },
+        ) from exc
+
+
+@app.post("/ai-auditor/run")
+async def ai_auditor_run(payload: AiAuditorRunRequest) -> dict:
+    _ensure_ai_auditor_dependencies()
+    try:
+        resolved_db_path = _resolve_existing_path(payload.db_path)
+        project_root = BASE_DIR.parent.resolve()
+        result = await run_in_threadpool(
+            run_ai_auditor_for_subject,
+            fisa_id=int(payload.fisa_id),
+            db_path=resolved_db_path,
+            project_root=project_root,
+            current_year=datetime.now().year,
+            allow_ai=bool(payload.allow_ai),
+        )
+        return result
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "status": "error",
+                "message": "database_not_found",
+                "error": str(exc),
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "status": "error",
+                "message": "subject_not_found",
+                "error": str(exc),
+            },
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "message": "ai_auditor_run_failed",
+                "error": str(exc),
+            },
+        ) from exc
+
+
+@app.post("/ai-auditor/run-all")
+async def ai_auditor_run_all(payload: AiAuditorRunAllRequest) -> dict:
+    _ensure_ai_auditor_dependencies()
+    try:
+        resolved_db_path = _resolve_existing_path(payload.db_path)
+        project_root = BASE_DIR.parent.resolve()
+        result = await run_in_threadpool(
+            run_ai_auditor_for_all_subjects,
+            db_path=resolved_db_path,
+            project_root=project_root,
+            current_year=datetime.now().year,
+            allow_ai=bool(payload.allow_ai),
+        )
+        return result
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "status": "error",
+                "message": "database_not_found",
+                "error": str(exc),
+            },
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "message": "ai_auditor_run_all_failed",
+                "error": str(exc),
+            },
+        ) from exc
 
 
 def _compare_visual_pdfs_blocking(left_pdf_path: Path, right_pdf_path: Path) -> dict:
