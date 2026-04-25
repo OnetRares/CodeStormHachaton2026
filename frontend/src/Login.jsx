@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import styles from './Login.module.css';
-import { mockLoginAPI, mockRegisterAPI } from './services/mockApi';
+import { loginAPI, registerAPI } from './services/authApi';
 
 export default function Login({ onLoginSuccess }) {
   const [isRegister, setIsRegister] = useState(false);
@@ -43,8 +43,8 @@ export default function Login({ onLoginSuccess }) {
 
     try {
       if (isRegister) {
-        // Call mock register API
-        const response = await mockRegisterAPI({
+        // Call register API
+        const response = await registerAPI({
           username: formData.username,
           email: formData.email,
           password: formData.password,
@@ -66,8 +66,8 @@ export default function Login({ onLoginSuccess }) {
           setSuccess('');
         }, 2000);
       } else {
-        // Call mock login API
-        const response = await mockLoginAPI({
+        // Call login API
+        const response = await loginAPI({
           username: formData.username,
           password: formData.password,
         });

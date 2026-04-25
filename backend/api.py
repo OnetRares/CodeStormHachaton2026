@@ -6,6 +6,9 @@ import ssl
 import re
 import json
 import sqlite3
+import base64
+import hashlib
+import hmac
 import tempfile
 from pathlib import Path
 import unicodedata
@@ -16,6 +19,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 try:
     from docx import Document
@@ -126,6 +130,23 @@ except ModuleNotFoundError:
 app = FastAPI(title="PDF Ingestion & Validation Service", version="2.0.0")
 BASE_DIR = Path(__file__).resolve().parent
 COMPARE_OUTPUT_DIR = BASE_DIR / "compare_output"
+USERS_DB_PATH = BASE_DIR / "data" / "users.db"
+
+EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]{3,50}$")
+PASSWORD_MIN_LENGTH = 6
+PASSWORD_HASH_ITERATIONS = 210_000
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 # Adăugăm middleware-ul pentru CORS
@@ -291,6 +312,125 @@ def _resolve_existing_path(raw_path: str) -> Path:
     raise FileNotFoundError(f"Path not found: {raw_path}")
 
 
+def _normalize_username(value: str) -> str:
+    return (value or "").strip()
+
+
+def _normalize_email(value: str) -> str:
+    return (value or "").strip().lower()
+
+
+def _ensure_auth_database() -> None:
+    USERS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(USERS_DB_PATH) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                password_salt TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.commit()
+
+
+def _hash_password(password: str, salt: bytes | None = None) -> tuple[str, str]:
+    password_bytes = (password or "").encode("utf-8")
+    salt_bytes = salt or os.urandom(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password_bytes,
+        salt_bytes,
+        PASSWORD_HASH_ITERATIONS,
+    )
+    salt_b64 = base64.b64encode(salt_bytes).decode("ascii")
+    hash_b64 = base64.b64encode(digest).decode("ascii")
+    return salt_b64, hash_b64
+
+
+def _verify_password(password: str, salt_b64: str, hash_b64: str) -> bool:
+    try:
+        salt_bytes = base64.b64decode(salt_b64.encode("ascii"))
+        expected_hash = base64.b64decode(hash_b64.encode("ascii"))
+    except Exception:
+        return False
+
+    _, computed_hash_b64 = _hash_password(password, salt=salt_bytes)
+    try:
+        computed_hash = base64.b64decode(computed_hash_b64.encode("ascii"))
+    except Exception:
+        return False
+    return hmac.compare_digest(expected_hash, computed_hash)
+
+
+def _validate_register_input(username: str, email: str, password: str) -> None:
+    if not username or not email or not password:
+        raise HTTPException(
+            status_code=422,
+            detail={"status": "error", "message": "All fields are required"},
+        )
+
+    if not USERNAME_PATTERN.fullmatch(username):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "status": "error",
+                "message": "Username must be 3-50 chars and contain only letters, numbers, ., _, -",
+            },
+        )
+
+    if not EMAIL_PATTERN.fullmatch(email):
+        raise HTTPException(
+            status_code=422,
+            detail={"status": "error", "message": "Please enter a valid email address"},
+        )
+
+    if len(password) < PASSWORD_MIN_LENGTH:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "status": "error",
+                "message": f"Password must have at least {PASSWORD_MIN_LENGTH} characters",
+            },
+        )
+
+
+def _validate_login_input(username: str, password: str) -> None:
+    if not username or not password:
+        raise HTTPException(
+            status_code=422,
+            detail={"status": "error", "message": "Username and password are required"},
+        )
+
+
+def _get_user_by_username(conn: sqlite3.Connection, username: str) -> sqlite3.Row | None:
+    conn.row_factory = sqlite3.Row
+    return conn.execute(
+        """
+        SELECT id, username, email, password_salt, password_hash
+        FROM users
+        WHERE username = ?
+        """,
+        (username,),
+    ).fetchone()
+
+
+def _get_user_by_email(conn: sqlite3.Connection, email: str) -> sqlite3.Row | None:
+    conn.row_factory = sqlite3.Row
+    return conn.execute(
+        """
+        SELECT id, username, email, password_salt, password_hash
+        FROM users
+        WHERE email = ?
+        """,
+        (email,),
+    ).fetchone()
+
+
 def _string_value(value: str | int | None) -> str:
     if value is None:
         return ""
@@ -386,6 +526,87 @@ def _build_single_fd_docx(plan_row, debug_source: str, output_docx_path: Path) -
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.post("/auth/register")
+def register_user(payload: RegisterRequest) -> dict:
+    _ensure_auth_database()
+    username = _normalize_username(payload.username)
+    email = _normalize_email(payload.email)
+    password = payload.password or ""
+    _validate_register_input(username, email, password)
+
+    password_salt, password_hash = _hash_password(password)
+
+    try:
+        with sqlite3.connect(USERS_DB_PATH) as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO users (username, email, password_salt, password_hash)
+                VALUES (?, ?, ?, ?)
+                """,
+                (username, email, password_salt, password_hash),
+            )
+            conn.commit()
+            user_id = int(cursor.lastrowid)
+    except sqlite3.IntegrityError:
+        with sqlite3.connect(USERS_DB_PATH) as conn:
+            if _get_user_by_username(conn, username):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"status": "error", "message": "Username already exists. Please choose another."},
+                )
+            if _get_user_by_email(conn, email):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"status": "error", "message": "Email already registered. Please use another email."},
+                )
+        raise HTTPException(
+            status_code=500,
+            detail={"status": "error", "message": "Failed to register user"},
+        )
+
+    return {
+        "status": "success",
+        "message": "Registration successful! You can now log in.",
+        "user": {
+            "id": user_id,
+            "username": username,
+            "email": email,
+        },
+    }
+
+
+@app.post("/auth/login")
+def login_user(payload: LoginRequest) -> dict:
+    _ensure_auth_database()
+    username = _normalize_username(payload.username)
+    password = payload.password or ""
+    _validate_login_input(username, password)
+
+    with sqlite3.connect(USERS_DB_PATH) as conn:
+        user = _get_user_by_username(conn, username)
+
+    invalid_credentials_error = HTTPException(
+        status_code=401,
+        detail={"status": "error", "message": "Invalid username or password"},
+    )
+
+    if not user:
+        raise invalid_credentials_error
+
+    if not _verify_password(password, str(user["password_salt"]), str(user["password_hash"])):
+        raise invalid_credentials_error
+
+    return {
+        "status": "success",
+        "message": "Login successful!",
+        "user": {
+            "id": int(user["id"]),
+            "username": str(user["username"]),
+            "email": str(user["email"]),
+        },
+    }
 
 
 @app.get("/competencies/subjects")
