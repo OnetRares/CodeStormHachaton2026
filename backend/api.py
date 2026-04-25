@@ -32,10 +32,16 @@ except ModuleNotFoundError as exc:
 
 try:
     from plan_parser import get_plan_discipline
-    from validation_service import valideaza_nivel2
+    from validation_service import (
+        list_discipline_competente,
+        recomanda_competente,
+        valideaza_nivel2,
+    )
     PLAN_VALIDATION_IMPORT_ERROR = None
 except ModuleNotFoundError as exc:
     get_plan_discipline = None
+    list_discipline_competente = None
+    recomanda_competente = None
     valideaza_nivel2 = None
     PLAN_VALIDATION_IMPORT_ERROR = exc
 
@@ -152,6 +158,21 @@ def _ensure_ingestion_dependencies() -> None:
     )
 
 
+def _ensure_plan_validation_dependencies() -> None:
+    if PLAN_VALIDATION_IMPORT_ERROR is None:
+        return
+
+    raise HTTPException(
+        status_code=500,
+        detail={
+            "status": "error",
+            "message": "missing_backend_dependency",
+            "error": str(PLAN_VALIDATION_IMPORT_ERROR),
+            "hint": "Install backend requirements to use validation competency endpoints.",
+        },
+    )
+
+
 def _ensure_visual_compare_dependencies() -> None:
     if PDF_COMPARE_IMPORT_ERROR is None:
         return
@@ -174,6 +195,34 @@ def _ensure_visual_compare_dependencies() -> None:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/competencies/subjects")
+def get_competency_subjects() -> dict:
+    _ensure_plan_validation_dependencies()
+    return {
+        "status": "success",
+        "subjects": list_discipline_competente(),
+    }
+
+
+@app.get("/competencies/recommend")
+def get_competencies_for_subject(subject: str) -> dict:
+    _ensure_plan_validation_dependencies()
+    subject_clean = (subject or "").strip()
+    if not subject_clean:
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "message": "subject is required"},
+        )
+
+    competencies = recomanda_competente(subject_clean)
+    return {
+        "status": "success",
+        "subject": subject_clean,
+        "count": len(competencies),
+        "competencies": competencies,
+    }
 
 
 def _compare_visual_pdfs_blocking(left_pdf_path: Path, right_pdf_path: Path) -> dict:
